@@ -552,7 +552,7 @@ void processMenuKey() {
 void processEnterKey() {
   if (menumode) {
     if(menumode == 1){ menumode = 0; }  
-    if(menumode >= 2){ menumode = 1; change = true; paramAction(SAVE, menu); } // short right-click while in value selection screen: save, and return to menu screen
+    if(menumode >= 2){ menumode = 1; change = true; paramAction(SAVE, menu); } // save, and return to menu screen
   }
 }
 
@@ -567,8 +567,11 @@ void processMenuEncoder(int8_t encoder_val) {
       menu = max(1 , min(menu, N_PARAMS));
       menu = paramAction(NEXT_MENU, menu);  // auto probe next menu item (gaps may exist)
       encoder_val = 0;
+    } else {
+      paramAction(UPDATE_MENU, menu);  // update param with encoder change and display
     }
-    if(encoder_change || (prev_menumode != menumode))
+    
+    /*if(encoder_change || (prev_menumode != menumode))
       paramAction(UPDATE_MENU, (menumode) ? menu : 0);  // update param with encoder change and display
     
     prev_menumode = menumode;
@@ -577,6 +580,7 @@ void processMenuEncoder(int8_t encoder_val) {
       Serial.print("Post update processing on "); Serial.println(menu);
       
     }
+    */
 }  
 
 //------------------  Initialization  Program  -------------------------
@@ -678,7 +682,7 @@ void loop() {
     case EVT_NOCHANGE:
       break; // nothing to do
   }
-  
+  /*
   //  rotary encoder processing
   if (encoder_val) {
     // the encoder has moved; decide who processes it
@@ -688,7 +692,8 @@ void loop() {
       // any other encoder use - just update freq?
     }
   }
-  /*
+  */
+
   if((menumode) || (prev_menumode != menumode)){  // Show parameter and value
     int8_t encoder_change = encoder_val;
     if((menumode == 1) && encoder_change){
@@ -707,7 +712,7 @@ void loop() {
       
     }
   }
-  */
+
 
   // debug output
   if (Serial.available()) {
