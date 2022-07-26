@@ -431,7 +431,10 @@ void lcd_blanks(){
 void show_banner(){
   setCursor(0, 0);
   ucg.print(F("Irwell TXCVR V0.1"));
-  ucg.print('\x01'); lcd_blanks(); lcd_blanks();
+  //ucg.print('\x01'); 
+  lcd_blanks(); lcd_blanks();
+  setCursor(0, 1);
+  lcd_blanks(); lcd_blanks();
 }
 
 void setCursor(int x, int y) {
@@ -478,14 +481,14 @@ void actionCommon(uint8_t action, uint8_t *ptr, uint8_t size){
   eeprom_addr += size;
 }
 
-template<typename T> void paramAction(uint8_t action, volatile T& value, uint8_t menuid, const char* label, const char* enumArray[], int32_t _min, int32_t _max){
+template<typename T> void paramAction(uint8_t action, volatile T& value, uint8_t menuid, const char* label, const char* enumArray[], int32_t _min, int32_t _max, void (*trigger)(int m)){
   switch(action){
     case UPDATE:
     case UPDATE_MENU:
       value = (int32_t)value + encoder_val;
       if(     value < _min) value = _min;
       else if(value > _max) value = _max;
-           
+      trigger(menuid);     
       encoder_val = 0;
 
       lcdnoCursor();
@@ -505,6 +508,10 @@ template<typename T> void paramAction(uint8_t action, volatile T& value, uint8_t
   }
 }
 
+void triggerValueChange(int menu) {
+  Serial.print("Trigger on "); Serial.println(menu);
+}
+
 int8_t paramAction(uint8_t action, uint8_t id = ALL) { // list of parameters
   if((action == SAVE) || (action == LOAD)){
     eeprom_addr = EEPROM_OFFSET;
@@ -515,24 +522,24 @@ int8_t paramAction(uint8_t action, uint8_t id = ALL) { // list of parameters
   switch(id){    
     case ALL:     for(id = 1; id != N_ALL_PARAMS+1; id++) paramAction(action, id);  // for all parameters
     // Visible parameters
-    case MODE:    paramAction(action, mode,     0x12, "Mode",      mode_label,     0, _N(mode_label) - 1);     break;
-    case FILTER:  paramAction(action, filt,     0x13, "NR Filter", filt_label,     0, _N(filt_label) - 1);     break;
-    case BAND:    paramAction(action, bandval,  0x14, "Band",      band_label,     0, _N(band_label) - 1);     break;
-    case STEP:    paramAction(action, stepsize, 0x15, "Tune Rate", stepsize_label, 0, _N(stepsize_label) - 1); break;
-    case VFOSEL:  paramAction(action, vfosel,   0x16, "VFO Mode",  vfosel_label,   0, _N(vfosel_label) - 1);   break;
-    case RIT:     paramAction(action, rit,      0x17, "RIT",       offon_label,    0, 1);                      break;
-    case SIFXTAL: paramAction(action, xtalfreq, 0x83, "Ref freq",  NULL,    14000000, 28000000);               break;
-    case IF_LSB:  paramAction(action, if_bfo[0],0x84, "IF-LSB",    NULL,    14000000, 28000000);               break;
-    case IF_USB:  paramAction(action, if_bfo[1],0x85, "IF-USB",    NULL,    14000000, 28000000);               break;
-    case IF_CW:   paramAction(action, if_bfo[2],0x86, "IF-CW",     NULL,    14000000, 28000000);               break;
-    case IF_AM:   paramAction(action, if_bfo[3],0x87, "IF-AM",     NULL,    14000000, 28000000);               break;
+    case MODE:    paramAction(action, mode,     0x11, "Mode",      mode_label,     0, _N(mode_label) - 1,     triggerValueChange); break;
+    case FILTER:  paramAction(action, filt,     0x13, "NR Filter", filt_label,     0, _N(filt_label) - 1,     triggerValueChange); break;
+    case BAND:    paramAction(action, bandval,  0x14, "Band",      band_label,     0, _N(band_label) - 1,     triggerValueChange); break;
+    case STEP:    paramAction(action, stepsize, 0x15, "Tune Rate", stepsize_label, 0, _N(stepsize_label) - 1, triggerValueChange); break;
+    case VFOSEL:  paramAction(action, vfosel,   0x16, "VFO Mode",  vfosel_label,   0, _N(vfosel_label) - 1,   triggerValueChange); break;
+    case RIT:     paramAction(action, rit,      0x17, "RIT",       offon_label,    0, 1,                      triggerValueChange); break;
+    case SIFXTAL: paramAction(action, xtalfreq, 0x83, "Ref freq",  NULL,    14000000, 28000000,               triggerValueChange); break;
+    case IF_LSB:  paramAction(action, if_bfo[0],0x84, "IF-LSB",    NULL,    14000000, 28000000,               triggerValueChange); break;
+    case IF_USB:  paramAction(action, if_bfo[1],0x85, "IF-USB",    NULL,    14000000, 28000000,               triggerValueChange); break;
+    case IF_CW:   paramAction(action, if_bfo[2],0x86, "IF-CW",     NULL,    14000000, 28000000,               triggerValueChange); break;
+    case IF_AM:   paramAction(action, if_bfo[3],0x87, "IF-AM",     NULL,    14000000, 28000000,               triggerValueChange); break;
 
     // invisible parameters
-    case FREQA:   paramAction(action, vfo[VFOA],      0, NULL, NULL, 0, 0); break;
-    case FREQB:   paramAction(action, vfo[VFOB],      0, NULL, NULL, 0, 0); break;
-    case MODEA:   paramAction(action, vfomode[VFOA],  0, NULL, NULL, 0, 0); break;
-    case MODEB:   paramAction(action, vfomode[VFOB],  0, NULL, NULL, 0, 0); break;
-    case VERS:    paramAction(action, eeprom_version, 0, NULL, NULL, 0, 0); break;
+    case FREQA:   paramAction(action, vfo[VFOA],      0, NULL,     NULL,           0,        0,               triggerValueChange); break;
+    case FREQB:   paramAction(action, vfo[VFOB],      0, NULL,     NULL,           0,        0,               triggerValueChange); break;
+    case MODEA:   paramAction(action, vfomode[VFOA],  0, NULL,     NULL,           0,        0,               triggerValueChange); break;
+    case MODEB:   paramAction(action, vfomode[VFOB],  0, NULL,     NULL,           0,        0,               triggerValueChange); break;
+    case VERS:    paramAction(action, eeprom_version, 0, NULL,     NULL,           0,        0,               triggerValueChange); break;
     
     case NULL_:   menumode = NO_MENU; show_banner(); change = true; break;
     default:      if((action == NEXT_MENU) && (id != N_PARAMS)) 
@@ -542,46 +549,37 @@ int8_t paramAction(uint8_t action, uint8_t id = ALL) { // list of parameters
 }
 
 void processMenuKey() {
-    int8_t _menumode;
-    if(menumode == 0){ _menumode = 1; if(menu == 0) menu = 1; }  // short left-click while in default screen: enter menu mode
-    if(menumode == 1){ _menumode = 2; }                          // short left-click while in menu: enter value selection screen
-    if(menumode >= 2){ _menumode = 0; paramAction(SAVE, menu); } // short left-click while in value selection screen: save, and return to default screen
-    menumode = _menumode;  
+    if     (menumode == 0){ menumode = 1; if(menu == 0) menu = 1; }  // enter menu mode
+    else if(menumode == 1){ menumode = 2; }                          // enter value selection screen
+    else if(menumode >= 2){ paramAction(SAVE, menu); menumode = 0;}  // save value, and return to default screen
 }
 
 void processEnterKey() {
-  if (menumode) {
-    if(menumode == 1){ menumode = 0; }  
-    if(menumode >= 2){ menumode = 1; change = true; paramAction(SAVE, menu); } // save, and return to menu screen
-  }
+  if     (menumode == 1){ menumode = 0; }  
+  else if(menumode >= 2){ menumode = 1; change = true; paramAction(SAVE, menu); } // save value, and return to menu mode
+
 }
 
 bool menuActive() {
   return menumode > 0;
 }
 
-void processMenuEncoder(int8_t encoder_val) {
+void processMenu() {
+  
+  if((menumode) || (prev_menumode != menumode)){  // Show parameter and value
     int8_t encoder_change = encoder_val;
-    if(menumode == 1){
+    if((menumode == 1) && encoder_change){
       menu += encoder_val;   // Navigate through menu
       menu = max(1 , min(menu, N_PARAMS));
       menu = paramAction(NEXT_MENU, menu);  // auto probe next menu item (gaps may exist)
       encoder_val = 0;
-    } else {
-      paramAction(UPDATE_MENU, menu);  // update param with encoder change and display
     }
-    
-    /*if(encoder_change || (prev_menumode != menumode))
+    if(encoder_change || (prev_menumode != menumode))
       paramAction(UPDATE_MENU, (menumode) ? menu : 0);  // update param with encoder change and display
     
     prev_menumode = menumode;
-    if( (menumode == 2) && encoder_change){
-      // post-update processing TODO
-      Serial.print("Post update processing on "); Serial.println(menu);
-      
-    }
-    */
-}  
+  }  
+}
 
 //------------------  Initialization  Program  -------------------------
  
@@ -682,37 +680,10 @@ void loop() {
     case EVT_NOCHANGE:
       break; // nothing to do
   }
-  /*
-  //  rotary encoder processing
-  if (encoder_val) {
-    // the encoder has moved; decide who processes it
-    if (menuActive()) {
-      processMenuEncoder(encoder_val);
-    } else {
-      // any other encoder use - just update freq?
-    }
-  }
-  */
 
-  if((menumode) || (prev_menumode != menumode)){  // Show parameter and value
-    int8_t encoder_change = encoder_val;
-    if((menumode == 1) && encoder_change){
-      menu += encoder_val;   // Navigate through menu
-      menu = max(1 , min(menu, N_PARAMS));
-      menu = paramAction(NEXT_MENU, menu);  // auto probe next menu item (gaps may exist)
-      encoder_val = 0;
-    }
-    if(encoder_change || (prev_menumode != menumode))
-      paramAction(UPDATE_MENU, (menumode) ? menu : 0);  // update param with encoder change and display
-    
-    prev_menumode = menumode;
-    if( (menumode == 2) && encoder_change){
-      // post-update processing TODO
-      Serial.print("Post update processing on "); Serial.println(menu);
-      
-    }
-  }
+  processMenu();
 
+  
 
   // debug output
   if (Serial.available()) {
