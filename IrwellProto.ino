@@ -2,44 +2,11 @@
 //   G6LBQ Irwell HF Transceiver VFO - Version 1.0
 //   stm32 + si5351a VFO With BFO & Conversion Oscilator
 //   
-//   (I 'JAN2KD 2016.10.19 Multi Band DDS VFO Ver3.1')     
 //   Expanded with Multiple SI5351 & I/O Expanders by G6LBQ  
 //
 //   Created by G6LBQ on 15/09/2020 
 ///////////////////////////////////////////////////////////////////////////////////
 
-
-///////////////////////////////////////////////////////////////////////////////////
-//  RGB colours used for the display - Added by G6LBQ
-//
-//  255-0-0     Red
-//  0-0-0       Black
-//  255-255-0   Yellow
-//  255-255-255 White
-//  0-255-0     Green
-//  50-50-50    Dark Grey
-//  100-100-100 Grey
-//  235-0-200   Pink
-//  0-255-255   Turquoise
-//  0-0-255     Blue
-///////////////////////////////////////////////////////////////////////////////////
-
-
-///////////////////////////////////////////////////////////////////////////////////
-//  Main Bandpasss Filters For HF Ham Bands - Added by G6LBQ
-//
-//  1) 0.15 MHz to 1.599999 MHz
-//  2) 1.600001 MHz to 1.999999 MHz
-//  3) 2.000001 MHz to 2.999999 MHz
-//  4) 3.000001 MHz to 3.999999 MHz
-//  5) 4.000001 MHz to 5.999999 MHz
-//  6) 6.000001 MHz to 7.999999 MHz
-//  7) 8.000001 MHz to 10.999999 MHz
-//  8) 11.000001 MHz to 14.999999 MHz
-//  9) 15.000001 MHz to 21.999999 MHz
-//  10)22.000001 MHz to 29.999999 MHz
-//
-///////////////////////////////////////////////////////////////////////////////////
 
 #define BLUEPILL    // uncomment to tweak some i/o ports for the blue pill, and enable Serial
 #define MOCKI2C     // uncomment this to mock transmission to the 2x pcf8574 , Si5351s
@@ -76,14 +43,9 @@ Ucglib_ILI9341_18x240x320_HWSPI ucg(__DC, __CS, __RST);
 //----------  Button Setting -----------------
 
 // define event names for the key events
-typedef enum {EVT_NOCHANGE, EVT_STEPUP, EVT_STEPDOWN, EVT_MENU, EVT_RIT, EVT_FREQ_ADJ, EVT_ENTER, EVT_MODE, EVT_BFO_ADJ} keyEvents;
+typedef enum {EVT_NOCHANGE, EVT_PA0_BTNUP, EVT_PA0_LONGPRESS, EVT_PA1_BTNUP, EVT_PA1_LONGPRESS, EVT_PC14_BTNUP, EVT_PC14_LONGPRESS, EVT_PC15_BTNUP, EVT_PC15_LONGPRESS } keyEvents;
 
 ButtonEvents b = ButtonEvents(EVT_NOCHANGE);
-
-//----------   CW Tone  ------------------- 
-
-#define   CW_TONE     700                 // 700Hz
-
 
 //----------   I/O Assign  ------------------- 
 
@@ -91,10 +53,9 @@ ButtonEvents b = ButtonEvents(EVT_NOCHANGE);
 #define   OUT_USB      PA8                // Data line for controlling modes of operation                  
 #define   OUT_CW       PA9                // G6LBQ added extra mode selection output                  
 #define   OUT_AM       PA10               // G6LBQ added extra mode selection output
-#define   SW_MENU      PA0
-#define   SW_ENTER     PA1                 
+#define   SW_BAND      PA0
+#define   SW_STEP      PA1                 
 #define   SW_MODE      PC14                 
-            
 #define   SW_RIT       PC15
 
 #ifdef BLUEPILL
@@ -114,33 +75,52 @@ ButtonEvents b = ButtonEvents(EVT_NOCHANGE);
 #define   CONV_PORT    2
 #define   CONV_CHL     1
 
+
+//----------   CW Tone  ------------------- 
+
+#define   CW_TONE     700                 // 700Hz
+
 //---------- Modes ---------------------
 
 typedef enum {MODE_LSB, MODE_USB, MODE_CW, MODE_AM, MODE_FM} modes;
 
 //---------- Variable setting ----------
 
+#define _N(a) sizeof(a)/sizeof(a[0])
+
+
+
+
+
+//---------- Rotary Encoder Processing -----------------------
+
 volatile int8_t encoder_val = 0;
-
-// temporary
-long freq;
-long freqrit;
-long vfofreq;
-long ifshift;
-long firstIF;
-bool flg_bfochg;
-bool flagrit;
-int fmode;
-long fstep;
-static const long fstepRates[] = {1, 10, 100, 1000, 10000, 100000, 1000000};
-#define fstepRatesSize (sizeof(fstepRates)/sizeof(fstepRates[0]))
-
 long interruptCount = 0;
 long lastInterruptCount = -1;
-
 int_fast32_t interruptsTimeExpired = 0; 
 
 
+// interrupt routine
+void Rotary_enc(){  
+  static long freq = 0;
+  interruptCount++;   // investigate very high interupt rate
+  unsigned char result = r.process();
+  if (result == DIR_CW) {
+    encoder_val++;
+  } else if (result == DIR_CCW) {
+    encoder_val--;
+  }
+}
+
+// Can't use this yet - the menu code currently uses the encoder value multiple times before reseting it
+int8_t readEncoder() {
+  int8_t result;
+  noInterrupts();     
+  result = encoder_val;
+  encoder_val = 0;
+  interrupts();
+  return result;
+}
 
 
 //--------- PCF8574 Interfacing ----------------------------------
@@ -153,7 +133,7 @@ void write_PCF8574(uint8_t address, uint8_t data) {
   Wire.endTransmission();
 #endif
 #ifdef TRACEI2C
-  Serial.print("Write to "); Serial.print(address); Serial.print(": "); Serial.println(data);
+  Serial.print("write_PCF8574 to "); Serial.print(address); Serial.print(": "); Serial.println(data);
 #endif
 }
 
@@ -177,56 +157,20 @@ void select_bank(int8_t bank) {
   currentBank = bank;
 }
 
-void select_BPF(long f) {
+void select_BPF(long freq) {
 
   // HF Band Pass Filter logic added by G6LBQ
-  if (freq >=150000 && freq<=1599999){
-    select_bank(0);
-  } else if(freq >=1600001 && freq<=1999999){
-    select_bank(1);
-  } else if(freq >=2000001 && freq<=2999999){
-    select_bank(2);
-  } else if(freq >=3000001 && freq<=3999999){
-    select_bank(3);
-  } else if(freq >=4000001 && freq<=5999999){
-    select_bank(4);
-  } else if (freq >=6000001 && freq<=7999999){
-    select_bank(5);
-  } else if(freq >=8000001 && freq<=10999999){
-    select_bank(6);
-  } else if(freq >=11000001 && freq<=14999999){
-    select_bank(7);
-  } else if(freq >=15000001 && freq<=21999999){
-    select_bank(8);
-  } else if(freq >=22000001 && freq<=29999999){
-    select_bank(9);
-  } else {
-    
-  }
-}
-
-
-
-//---------- PLL write ---------------------------
-//
-// Original code was for single conversion IF at 11.059MHz so 11.059MHz + VFO Frequency
-// 01/07/2022 Changes are for dual conversion so 45MHz firstIF + VFO Frequency 
-
-void PLL_write(){
-  if(flg_bfochg == 0){
-    if (flagrit==0)
-      vfofreq=freq+firstIF;               // G6LBQ 01/07/2022 changed from vfofreq=freq+ifshift; to vfofreq=freq+firstIF;
-    else
-      vfofreq=freq+firstIF+freqrit;       // G6LBQ 01/07/2022 changed from vfofreq=freq+ifshift+freqrit; to vfofreq=freq+firstIF+freqrit;
-
-    //Vfo_out(vfofreq);                     // VFO output
-    //Bfo_out(ifshift);                     // BFO
-  }
-  else{
-    ifshift = freq;
-    //Bfo_out(ifshift);                     // BFO
-    freq = ifshift;
-  }
+  if        (freq <  1600000){ select_bank(0);
+  } else if (freq <  2000000){ select_bank(1);
+  } else if (freq <  3000000){ select_bank(2);
+  } else if (freq <  4000000){ select_bank(3);
+  } else if (freq <  6000000){ select_bank(4);
+  } else if (freq <  8000000){ select_bank(5);
+  } else if (freq < 11000000){ select_bank(6);
+  } else if (freq < 15000000){ select_bank(7);
+  } else if (freq < 22000000){ select_bank(8);
+  } else if (freq < 30000000){ select_bank(9);
+  } 
 }
 
 // -----     Routines to interface to the Si5351s-----
@@ -251,84 +195,18 @@ void setFrequency(uint8_t port, uint8_t channel, uint32_t frequency) {
   currentFrequency[port] = frequency;
 }
 
-
-
-//---------- Encoder Interrupt -----------------------
-
-void Rotary_enc(){  // investigate very high interupt rate
-  static long freq = 0;
-  interruptCount++;
-  unsigned char result = r.process();
-  if (result == DIR_CW) {
-    encoder_val++;
-  } else if (result == DIR_CCW) {
-    encoder_val--;
-  }
-}
-
-//------------ On Air -----------------------------
-
-
-
-void modeset(){
-
-  switch(fmode){
-    case MODE_LSB:
-      //ifshift = eep_bfo[0];
-      setFrequency(CONV_PORT, CONV_CHL,  56059000);
-      break;
-    case MODE_USB:                                      
-      //ifshift = eep_bfo[1];
-      setFrequency(CONV_PORT, CONV_CHL,  33941000);
-      break;
-    case MODE_CW:
-      //ifshift = eep_bfo[2];
-      setFrequency(CONV_PORT, CONV_CHL,  56059000);
-      break;
-    case MODE_AM:
-      //ifshift = eep_bfo[3];
-      setFrequency(CONV_PORT, CONV_CHL,  56059000);
-      break;
-  }
-
-  digitalWrite(OUT_LSB, fmode==MODE_LSB);
-  digitalWrite(OUT_USB, fmode==MODE_USB);
-  digitalWrite(OUT_CW,  fmode==MODE_CW);       // G6LBQ added 1/11/20
-  digitalWrite(OUT_AM,  fmode==MODE_AM);       // G6LBQ added 1/11/20
-}
-
-//------------- Mode set SW ------------
-
-void modesw() {
-  fmode = (fmode + 1) % 4;  // wrap around
-  modeset();
-  PLL_write();
+void disableFrequency(uint8_t port, uint8_t channel) {
+  currentFrequency[port] = -1;  // erase the "cached" frequency
+#ifndef MOCKI2C  
+  si5351aOutputOff(port, channel);
+#endif
+#ifdef TRACEI2C
+  Serial.print("Si5351 disable port: "); Serial.print(port); Serial.print(", chl: "); Serial.println(channel);
+#endif
 }
 
 
-
-
-
-//-------------- encoder frequency step set -----------
-
-void setstep(){
-  fstep = (fstep + 1) % fstepRatesSize;
-  //steplcd(); 
-}
-
-void setstepDown() {
-  if (fstep==0) fstep = fstepRatesSize;
-  fstep--;
-  //steplcd();
-}
-
-//------------- Step Screen ---------------------------
-static const String stepText[] = {"     1Hz", "    10Hz", "   100Hz", "    1KHz", "   10KHz", " 100KHz", "    1MHz"};
-
-
-
-
-//----------  Function EEPROM Initialize  ---------
+//----------  EEPROM Routines  ---------
 
 void Fnc_eepINIT(){
   uint16 dummy;
@@ -344,8 +222,6 @@ void Fnc_eepINIT(){
   dummy = EEPROM.init();
 }
 
-//----------  Function EEPROM Read(4byte)  ---------
-
 long Fnc_eepRD(uint16 adr){
   long val = 0;
   uint16 dat,dummy;  
@@ -355,8 +231,6 @@ long Fnc_eepRD(uint16 adr){
   dummy = EEPROM.read(adr+1,&dat);
   return val | dat;
 }
-
-//----------  Function EEPROM Write(4byte)  ---------
 
 void Fnc_eepWT(long dat,uint16 adr){
   uint16 dummy,val;
@@ -368,35 +242,7 @@ void Fnc_eepWT(long dat,uint16 adr){
   dummy = EEPROM.write(adr,val);
 }
 
-//------------- temp vars, routines --------------------------------
-
-// temp vars
-int eeprom_addr;
-#define EEPROM_OFFSET 0x0
-uint8_t eeprom_version;
-
-// state variables
-enum menu_t { NO_MENU, MENU_SELECTED, MENU_VALUE };
-volatile uint8_t menumode = 0;  // 0=not in menu, 1=selects menu item, 2=selects parameter value //todo - use enums
-volatile uint8_t prev_menumode = 0;
-volatile int8_t menu = 0;  // current parameter id selected in menu
-volatile bool change = true;
-volatile uint8_t mode = MODE_USB;  //todo need volatile?
-volatile uint8_t filt = 0;
-uint8_t bandval = 3;
-volatile uint8_t stepsize = 3;  //todo revisit - uSDX uses an enum
-volatile uint32_t xtalfreq = 25000000;
-unsigned long if_bfo[]= {11056570, 11059840, 11058400, 11058200};
-enum vfo_t { VFOA=0, VFOB=1, SPLIT=2 };
-volatile uint8_t vfosel = VFOA;
-volatile int16_t rit = 0;
-int32_t vfo[] = { 7074000, 14074000 };
-uint8_t vfomode[] = { MODE_USB, MODE_USB };
-
-void lcdnoCursor() {};  // really is nothing to do here. Unless the display does have a cursor?
-
-#define get_version_id() 1
-
+// todo - moch interfaces currently
 void eeprom_read_block (void *__dst, const void *__src, size_t __n) {
   Serial.print("eeprom_read_block: from "); Serial.print((int) __src); Serial.print(", length: "); Serial.println(__n);
 };
@@ -405,44 +251,207 @@ void eeprom_write_block(const void *__src, void *__dst, size_t __n) {
   Serial.print("eeprom_write_block: to "); Serial.print((int) __dst); Serial.print(", length: "); Serial.println(__n);
 };
 
-//------------- menu system --------------------------------
+//------------- temp vars, routines --------------------------------
+
+long freq;
+long freqrit;
+long vfofreq;
+long ifshift;
+long firstIF;
+bool flg_bfochg;
+bool flagrit;
+int fmode;
+long fstep;
+static const long fstepRates[] = {1, 10, 100, 1000, 10000, 100000, 1000000};
+#define fstepRatesSize (sizeof(fstepRates)/sizeof(fstepRates[0]))
+
+int eeprom_addr;
+#define EEPROM_OFFSET 0x0
+#define get_version_id() 1
+
+uint8_t eeprom_version;
 
 
-enum action_t { UPDATE, UPDATE_MENU, NEXT_MENU, LOAD, SAVE, SKIP, NEXT_CH };
-enum params_t {NULL_, MODE, FILTER, BAND, STEP, VFOSEL, RIT, SIFXTAL, IF_LSB, IF_USB, IF_CW, IF_AM, FREQA, FREQB, MODEA, MODEB, VERS, ALL=0xff};
-#define N_PARAMS 7  // number of (visible) parameters
-#define N_ALL_PARAMS (N_PARAMS+5)  // number of parameters
+volatile bool change = true;
 
-#define N_BANDS 11
+// state variables
 
-const char* mode_label[5] = { "LSB", "USB", "CW ", "AM ", "FM " };
-const char* filt_label[8] = { "Full", "7", "6", "5", "4", "3", "2", "1" };  // todo - use numeric input instead?
-const char* band_label[N_BANDS] = { "160m", "80m", "60m", "40m", "30m", "20m", "17m", "15m", "12m", "10m", "6m" };
-const char* stepsize_label[] = { "1Hz", "10Hz", "100Hz", "1KHz", "10KHz", "100KHz", "1MHz" };
-const char* vfosel_label[] = { "A", "B"/*, "Split"*/ };
-const char* offon_label[2] = {"OFF", "ON"};
+uint8_t mode = MODE_USB;
+uint8_t filt = 0;
+uint8_t bandval = 3;
+uint8_t stepsize = 3;  //todo revisit - uSDX uses an enum
+uint32_t xtalfreq = 25000000;
+unsigned long if_bfo[]= {11056570, 11059840, 11058400, 11058200};
+enum vfo_t { VFOA=0, VFOB=1, SPLIT=2 };
+uint8_t vfosel = VFOA;
+int16_t rit = 0;
+int16_t ritFreq = 0;
+int32_t vfo[] = { 7074000, 14074000 };
+uint8_t vfomode[] = { MODE_USB, MODE_USB };
 
-#define _N(a) sizeof(a)/sizeof(a[0])
+static const uint32_t conversionOffsets[] { 
+  56059000, // LSB
+  33941000, // USB
+  56059000, // CW
+  56059000  // AM
+};
 
-void lcd_blanks(){ 
+void lcdnoCursor() {};  // really is nothing to do here. Unless the display does have a cursor?
+
+
+// -----------menu system labels ----------------------------------
+
+const char* mode_label[]       = { "LSB", "USB", "CW ", "AM ", "FM " };
+const char* filt_label[]       = { "Full", "7", "6", "5", "4", "3", "2", "1" };
+const char* band_label[]        = { "160m", "80m", "60m", "40m", "30m", "20m", "17m", "15m", "12m", "10m", "6m" };
+const char* stepsize_label[]    = { "1Hz", "10Hz", "100Hz", "1KHz", "10KHz", "100KHz", "1MHz" };
+const char* vfosel_label[]      = { "VFO A", "VFO B"/*, "Split"*/ };
+const char* offon_label[]       = {"OFF", "ON"};
+
+
+//------------- display subsystem  --------------------------------
+
+void printBlanks(){ 
   ucg.print("        ");
 }
-
-void show_banner(){
-  setCursor(0, 0);
-  ucg.print(F("Irwell TXCVR V0.1"));
-  //ucg.print('\x01'); 
-  lcd_blanks(); lcd_blanks();
-  setCursor(0, 1);
-  lcd_blanks(); lcd_blanks();
-}
-
 void setCursor(int x, int y) {
   ucg.setPrintPos(x*22, y*22+22);
 }
 
-// output menuid in x.y format
-void printmenuid(uint8_t menuid){
+void printVFO(int sel) {
+  ucg.print(vfosel_label[sel]); ucg.print(" ");ucg.print(mode_label[vfomode[sel]]); ucg.print(" ");ucg.print(vfo[sel]);printBlanks();
+}
+
+void printPrimaryVFO(int sel) {
+  setCursor(0, 3); printVFO(sel);
+}
+
+void printSecondaryVFO(int sel) {
+  setCursor(0, 4); printVFO(sel);
+}
+
+void printStep(int stepsize) {
+  setCursor(0, 5); ucg.print("Tune Rate ");ucg.print(stepsize_label[stepsize]);printBlanks();
+}
+
+void printRIT(int rit) {
+  setCursor(0, 6); ucg.print("RIT ");ucg.print(offon_label[rit]); 
+}
+
+//--------------- Business Logic---------------------------------------------
+
+#define firstIF 45000000L       // Added by G6LBQ 01/07/2022
+
+
+
+void updateModeOutputs(uint8_t mode) {
+  digitalWrite(OUT_LSB, mode==MODE_LSB);
+  digitalWrite(OUT_USB, mode==MODE_USB);
+  digitalWrite(OUT_CW,  mode==MODE_CW);       // G6LBQ added 1/11/20
+  digitalWrite(OUT_AM,  mode==MODE_AM);       // G6LBQ added 1/11/20
+}
+
+// Original code was for single conversion IF at 11.059MHz so 11.059MHz + VFO Frequency
+// 01/07/2022 Changes are for dual conversion so 45MHz firstIF + VFO Frequency 
+
+void updateAllFrquencyOutputs(uint8_t mode, int32_t freq, int32_t ifshift, int32_t freqRIT) {
+  select_BPF(freq);
+  updateModeOutputs(mode);
+  int32_t vfofreq = freq + firstIF + freqRIT;
+  setFrequency(VFO_PORT, VFO_CHL, vfofreq);
+  
+  if (mode!=MODE_AM) {
+    setFrequency(BFO_PORT, BFO_CHL, ifshift);
+  } else {
+    disableFrequency(BFO_PORT, BFO_CHL);
+  }
+  setFrequency(CONV_PORT, CONV_CHL, conversionOffsets[mode]);
+}
+
+
+//--------------- value change triggers --------------------------------------
+
+void updateAllFreq() {
+  updateAllFrquencyOutputs(vfomode[vfosel], vfo[vfosel], if_bfo[vfomode[vfosel]], rit ? ritFreq : 0);
+}
+
+// Band information - last 4 are made up.
+const uint8_t bandMode[]   = {MODE_LSB, MODE_LSB,  MODE_CW, MODE_USB, MODE_USB, MODE_USB,  MODE_AM,  MODE_FM, MODE_USB, MODE_USB };
+const uint32_t bandFreq[] = { 3500000,  7000000, 10100000, 14000000, 21000000, 28000000, 30000000, 31000000, 32000000, 33000000 };
+
+void triggerVFOChange() {
+  updateAllFreq();
+  printPrimaryVFO(vfosel);
+}
+
+void triggerBandChange(int menu) {
+  vfomode[vfosel] = bandMode[bandval];
+  vfo[vfosel] = bandFreq[bandval];
+  triggerValueChange(0);
+}
+
+// Anything could have changed so calculate _everything_
+void triggerValueChange(int menu) {
+  // give all values to the output routine
+  updateAllFreq();
+  //Serial.print("Trigger on "); Serial.println(menu);
+  printPrimaryVFO(vfosel);
+  printSecondaryVFO(vfosel^1);
+  printStep(stepsize);
+  printRIT(rit);
+}
+
+void triggerNoop(int menu) {}
+
+
+
+//-------------- encoder tune rate  -----------
+
+void setstepUp(){
+  stepsize = (stepsize + 1) % fstepRatesSize;
+  printStep(stepsize); 
+}
+
+void setstepDown() {
+  if (stepsize==0) stepsize = fstepRatesSize;
+  stepsize--;
+  printStep(stepsize);
+}
+
+void bandUp() {
+  bandval = (bandval + 1) % _N(band_label);
+  triggerBandChange(0);
+}
+
+void bandDown() {
+  if (bandval==0) bandval = _N(band_label);
+  bandval--;
+  triggerBandChange(0);
+}
+
+
+//------------- menu system --------------------------------
+
+enum menu_t { NO_MENU, MENU_SELECTED, MENU_VALUE };
+uint8_t menumode = 0;  // 0=not in menu, 1=selects menu item, 2=selects parameter value //todo - use enums
+uint8_t menu = 1;  // current parameter id selected in menu
+
+
+enum action_t { UPDATE, UPDATE_MENU, NEXT_MENU, LOAD, SAVE, SKIP, NEXT_CH };
+enum params_t {NULL_, MODE, FILTER, BAND, STEP, VFOSEL, RIT, RITFREQ, SIFXTAL, IF_LSB, IF_USB, IF_CW, IF_AM, FREQA, FREQB, MODEA, MODEB, VERS, ALL=0xff};
+#define N_PARAMS 12                 // number of (visible) parameters
+#define N_ALL_PARAMS (N_PARAMS+5)  // total of all parameters
+
+
+void show_banner(){
+  setCursor(0, 0);
+  ucg.print("Irwell TXCVR V0.1");
+  printBlanks(); printBlanks();
+  setCursor(0, 1);
+  printBlanks(); printBlanks();
+}
+
+void printmenuid(uint8_t menuid){ // output menuid in x.y format
   static const char separator[] = {'.', ' '};
   uint8_t ids[] = {(uint8_t)(menuid >> 4), (uint8_t)(menuid & 0xF)};
   for(int i = 0; i < 2; i++){
@@ -455,11 +464,12 @@ void printmenuid(uint8_t menuid){
     ucg.print(separator[i]);
   }
 }
+
 void printlabel(uint8_t action, uint8_t menuid, const char* label){
   if(action == UPDATE_MENU){
     setCursor(0, 0);
     printmenuid(menuid);
-    ucg.print(label); lcd_blanks(); lcd_blanks();
+    ucg.print(label); printBlanks(); printBlanks();
     setCursor(0, 1); // value on next line
     if(menumode >= MENU_VALUE) ucg.print('>');
   } else { // UPDATE (not in menu)
@@ -475,23 +485,24 @@ void actionCommon(uint8_t action, uint8_t *ptr, uint8_t size){
     case SAVE:
       eeprom_write_block((const void *)ptr, (void *)eeprom_addr, size);
       break;
-    case SKIP:
+    case SKIP:  // for calculating the eeprom_addr for a menu item later in the list
       break;
   }
   eeprom_addr += size;
 }
 
 template<typename T> void paramAction(uint8_t action, volatile T& value, uint8_t menuid, const char* label, const char* enumArray[], int32_t _min, int32_t _max, void (*trigger)(int m)){
+  uint32_t delta = encoder_val;
   switch(action){
     case UPDATE:
     case UPDATE_MENU:
-      value = (int32_t)value + encoder_val;
+      if (sizeof(T) == sizeof(uint32_t)) delta *= fstepRates[stepsize];  // large menu items use the tune-rate
+      value = (int32_t)value + delta;
       if(     value < _min) value = _min;
       else if(value > _max) value = _max;
-      trigger(menuid);     
       encoder_val = 0;
 
-      lcdnoCursor();
+      //lcdnoCursor();
       printlabel(action, menuid, label);  // print normal/menu label
       if(enumArray == NULL){  // print value
         if((_min < 0) && (value >= 0)) ucg.print('+');  // add + sign for positive values, in case negative values are supported
@@ -499,7 +510,9 @@ template<typename T> void paramAction(uint8_t action, volatile T& value, uint8_t
       } else {
         ucg.print(enumArray[value]);
       }
-      lcd_blanks(); lcd_blanks();
+      printBlanks(); printBlanks();
+      if (delta)
+        trigger(menuid);  // only trigger if there's a change to the value
       break;
       
     default:
@@ -508,12 +521,9 @@ template<typename T> void paramAction(uint8_t action, volatile T& value, uint8_t
   }
 }
 
-void triggerValueChange(int menu) {
-  Serial.print("Trigger on "); Serial.println(menu);
-}
-
 int8_t paramAction(uint8_t action, uint8_t id = ALL) { // list of parameters
   if((action == SAVE) || (action == LOAD)){
+    // first calculate eeprom_addr for this item
     eeprom_addr = EEPROM_OFFSET;
     for(uint8_t _id = 1; _id < id; _id++) 
       paramAction(SKIP, _id);
@@ -522,26 +532,27 @@ int8_t paramAction(uint8_t action, uint8_t id = ALL) { // list of parameters
   switch(id){    
     case ALL:     for(id = 1; id != N_ALL_PARAMS+1; id++) paramAction(action, id);  // for all parameters
     // Visible parameters
-    case MODE:    paramAction(action, mode,     0x11, "Mode",      mode_label,     0, _N(mode_label) - 1,     triggerValueChange); break;
-    case FILTER:  paramAction(action, filt,     0x13, "NR Filter", filt_label,     0, _N(filt_label) - 1,     triggerValueChange); break;
-    case BAND:    paramAction(action, bandval,  0x14, "Band",      band_label,     0, _N(band_label) - 1,     triggerValueChange); break;
-    case STEP:    paramAction(action, stepsize, 0x15, "Tune Rate", stepsize_label, 0, _N(stepsize_label) - 1, triggerValueChange); break;
-    case VFOSEL:  paramAction(action, vfosel,   0x16, "VFO Mode",  vfosel_label,   0, _N(vfosel_label) - 1,   triggerValueChange); break;
-    case RIT:     paramAction(action, rit,      0x17, "RIT",       offon_label,    0, 1,                      triggerValueChange); break;
-    case SIFXTAL: paramAction(action, xtalfreq, 0x83, "Ref freq",  NULL,    14000000, 28000000,               triggerValueChange); break;
-    case IF_LSB:  paramAction(action, if_bfo[0],0x84, "IF-LSB",    NULL,    14000000, 28000000,               triggerValueChange); break;
-    case IF_USB:  paramAction(action, if_bfo[1],0x85, "IF-USB",    NULL,    14000000, 28000000,               triggerValueChange); break;
-    case IF_CW:   paramAction(action, if_bfo[2],0x86, "IF-CW",     NULL,    14000000, 28000000,               triggerValueChange); break;
-    case IF_AM:   paramAction(action, if_bfo[3],0x87, "IF-AM",     NULL,    14000000, 28000000,               triggerValueChange); break;
+    case MODE:    paramAction(action, vfomode[vfosel],0x11,      "Mode",     mode_label,        0,     _N(mode_label)-1, triggerValueChange); break;
+    case FILTER:  paramAction(action, filt,           0x13, "NR Filter",     filt_label,        0,     _N(filt_label)-1, triggerValueChange); break;
+    case BAND:    paramAction(action, bandval,        0x14,      "Band",     band_label,        0,     _N(band_label)-1, triggerBandChange ); break;
+    case STEP:    paramAction(action, stepsize,       0x15, "Tune Rate", stepsize_label,        0, _N(stepsize_label)-1, triggerValueChange); break;
+    case VFOSEL:  paramAction(action, vfosel,         0x16,  "VFO Mode",   vfosel_label,        0,   _N(vfosel_label)-1, triggerValueChange); break;
+    case RIT:     paramAction(action, rit,            0x17,       "RIT",    offon_label,        0,                    1, triggerValueChange); break;
+    case RITFREQ: paramAction(action, ritFreq,        0x18,"RIT Offset",           NULL,    -1000,                 1000, triggerValueChange); break;
+    case SIFXTAL: paramAction(action, xtalfreq,       0x83,  "Ref freq",           NULL, 14000000,             28000000, triggerValueChange); break;
+    case IF_LSB:  paramAction(action, if_bfo[0],      0x84,    "IF-LSB",           NULL, 14000000,             28000000, triggerValueChange); break;
+    case IF_USB:  paramAction(action, if_bfo[1],      0x85,    "IF-USB",           NULL, 14000000,             28000000, triggerValueChange); break;
+    case IF_CW:   paramAction(action, if_bfo[2],      0x86,     "IF-CW",           NULL, 14000000,             28000000, triggerValueChange); break;
+    case IF_AM:   paramAction(action, if_bfo[3],      0x87,     "IF-AM",           NULL, 14000000,             28000000, triggerValueChange); break;
 
-    // invisible parameters
-    case FREQA:   paramAction(action, vfo[VFOA],      0, NULL,     NULL,           0,        0,               triggerValueChange); break;
-    case FREQB:   paramAction(action, vfo[VFOB],      0, NULL,     NULL,           0,        0,               triggerValueChange); break;
-    case MODEA:   paramAction(action, vfomode[VFOA],  0, NULL,     NULL,           0,        0,               triggerValueChange); break;
-    case MODEB:   paramAction(action, vfomode[VFOB],  0, NULL,     NULL,           0,        0,               triggerValueChange); break;
-    case VERS:    paramAction(action, eeprom_version, 0, NULL,     NULL,           0,        0,               triggerValueChange); break;
+    // invisible parameters. These are here only for eeprom save/restore
+    case FREQA:   paramAction(action, vfo[VFOA],         0,        NULL,           NULL,         0,                    0, triggerNoop       ); break;
+    case FREQB:   paramAction(action, vfo[VFOB],         0,        NULL,           NULL,         0,                    0, triggerNoop       ); break;
+    case MODEA:   paramAction(action, vfomode[VFOA],     0,        NULL,           NULL,         0,                    0, triggerNoop       ); break;
+    case MODEB:   paramAction(action, vfomode[VFOB],     0,        NULL,           NULL,         0,                    0, triggerNoop       ); break;
+    case VERS:    paramAction(action, eeprom_version,    0,        NULL,           NULL,         0,                    0, triggerNoop       ); break;
     
-    case NULL_:   menumode = NO_MENU; show_banner(); change = true; break;
+    // case NULL_:   menumode = NO_MENU; show_banner(); change = true; break;
     default:      if((action == NEXT_MENU) && (id != N_PARAMS)) 
                       id = paramAction(action, max(1 /*0*/, min(N_PARAMS, id + ((encoder_val > 0) ? 1 : -1))) ); break;  // keep iterating util menu item found
   }
@@ -549,39 +560,34 @@ int8_t paramAction(uint8_t action, uint8_t id = ALL) { // list of parameters
 }
 
 void processMenuKey() {
-    if     (menumode == 0){ menumode = 1; if(menu == 0) menu = 1; }  // enter menu mode
-    else if(menumode == 1){ menumode = 2; }                          // enter value selection screen
-    else if(menumode >= 2){ paramAction(SAVE, menu); menumode = 0;}  // save value, and return to default screen
+    if     (menumode == 0){ menumode = 1; paramAction(UPDATE_MENU, menu);}  // enter menu mode
+    else if(menumode == 1){ menumode = 2; paramAction(UPDATE_MENU, menu);}                          // enter value selection screen
+    else if(menumode >= 2){ Serial.println("test menu"); paramAction(SAVE, menu); menumode = 0; show_banner();}  // save value, and return to default screen
 }
 
 void processEnterKey() {
-  if     (menumode == 1){ menumode = 0; }  
-  else if(menumode >= 2){ menumode = 1; change = true; paramAction(SAVE, menu); } // save value, and return to menu mode
+  if     (menumode == 1){ menumode = 0; show_banner();}  
+  else if(menumode >= 2){ Serial.println("test enter"); menumode = 1; change = true; paramAction(UPDATE_MENU, menu); paramAction(SAVE, menu); } // save value, and return to menu mode
 
-}
-
-bool menuActive() {
-  return menumode > 0;
 }
 
 void processMenu() {
-  
-  if((menumode) || (prev_menumode != menumode)){  // Show parameter and value
+  if (menumode) {
     int8_t encoder_change = encoder_val;
     if((menumode == 1) && encoder_change){
+      //Serial.println("menu - got encoder val "); Serial.println(encoder_change);
       menu += encoder_val;   // Navigate through menu
       menu = max(1 , min(menu, N_PARAMS));
       menu = paramAction(NEXT_MENU, menu);  // auto probe next menu item (gaps may exist)
       encoder_val = 0;
     }
-    if(encoder_change || (prev_menumode != menumode))
-      paramAction(UPDATE_MENU, (menumode) ? menu : 0);  // update param with encoder change and display
-    
-    prev_menumode = menumode;
-  }  
+    if(encoder_change)
+      paramAction(UPDATE_MENU, menu);  // update param with encoder change and display.
+  }
+  
 }
 
-//------------------  Initialization  Program  -------------------------
+//------------------  Initialization -------------------------
  
 void setup() {
 #ifdef BLUEPILL
@@ -603,13 +609,13 @@ void setup() {
   ucg.setRotate270();
   ucg.setColor(1, 0, 0, 0);       // set background color
   ucg.setColor(255,255,255);
-  ucg.setFont(ucg_font_inb16_mr);   // set an arbitrary font for the moment
+  ucg.setFont(ucg_font_inb16_mr);   // arbitrary font for the moment; must be fixed-size
 
 
-  b.add(SW_MENU, EVT_MENU, EVT_NOCHANGE);
-  b.add(SW_ENTER, EVT_ENTER, EVT_NOCHANGE);
-  b.add(SW_MODE, EVT_MODE, EVT_NOCHANGE);
-  b.add(SW_RIT, EVT_RIT, EVT_NOCHANGE);
+  b.add(SW_BAND, EVT_PA0_BTNUP, EVT_PA0_LONGPRESS);
+  b.add(SW_STEP, EVT_PA1_BTNUP, EVT_PA1_LONGPRESS);
+  b.add(SW_MODE, EVT_PC14_BTNUP, EVT_PC14_LONGPRESS);
+  b.add(SW_RIT,  EVT_PC15_BTNUP, EVT_PC15_LONGPRESS);
   
   pinMode(SW_TX,INPUT_PULLUP);
   pinMode(OUT_LSB,OUTPUT);                    // LSB Mode 
@@ -618,7 +624,7 @@ void setup() {
   pinMode(OUT_AM,OUTPUT);                     // AM Mode - G6LBQ added additional mode selection
   
   init_PCF8574();
-/* test display
+/* test display, font sizes
   setCursor(0, 0); ucg.print("Line 0");
   setCursor(1, 1); ucg.print("offset x");
   setCursor(2, 2); ucg.print("Line 2, offset 2");
@@ -631,13 +637,14 @@ void setup() {
   if((eeprom_version != get_version_id()) || !digitalRead(SW_BAND)){  // EEPROM clean: if key pressed or version signature in EEPROM does NOT corresponds with this firmware
     eeprom_version = get_version_id();
     paramAction(SAVE);  // save default parameter values
-    setCursor(0, 1); ucg.print(F("Reset settings.."));
+    setCursor(0, 1); ucg.print("Reset settings..");
     delay(500); // wdt_reset();
   } else {
     paramAction(LOAD);  // load all parameters
   }
   */
   show_banner();
+  triggerValueChange(0);
 }
 
 //----------  Main program  ------------------------------------
@@ -662,32 +669,63 @@ void loop() {
   
   int event = b.getButtonEvent();
   switch (event) {
-     case EVT_MENU:
+     case EVT_PC15_BTNUP: // was the RIT button
       processMenuKey();
       break;
-    case EVT_ENTER:
+      
+    case EVT_PC14_BTNUP:  // was the MODE button
       processEnterKey();
       break;
-    case EVT_STEPUP:
-      //setstep();
+      
+    case EVT_PA1_BTNUP:     // STEP button
+      setstepDown();
       break;
-    case EVT_STEPDOWN:
-      //setstepDown();
+    case EVT_PA1_LONGPRESS: // STEP button
+      setstepUp();
       break;
-    case EVT_RIT:
-      //setrit();
+      
+    case EVT_PA0_BTNUP:     // add back the BAND button
       break;
+    case EVT_PA0_LONGPRESS:
+      break;
+      
     case EVT_NOCHANGE:
       break; // nothing to do
   }
 
-  processMenu();
+  if (menumode) {
+    processMenu();
+  } else {
+    // only process the encoder if not in menu mode. This is because encoder counts could occur during the slow screen painting
+    if (encoder_val) {
+      vfo[vfosel] += encoder_val*fstepRates[stepsize];
+      triggerVFOChange();
+      encoder_val = 0;
+    }
+  }
 
+  if (digitalRead(SW_TX)==LOW) {
+    // transmit processing 
+    // TODO:
+    // On entering transmit:
+    // * Update the display
+    // * Alter the vfo frequency depending on CW mode. Existing code was
+    //  if(fmode == MODE_CW)                        // CW?
+    //     Vfo_out(vfofreq + CW_TONE);               // Vfofreq+700Hz
+    //  else
+    //    Vfo_out(vfofreq);                         // vfo out
+    //    }
+    // Do NOT busy-wait on finishing transmit
+    // On exiting transmit:
+    // * update the dispay
+    // * revert the vfo frequency (although original code doesn't appear to do this?
+  }
   
 
   // debug output
   if (Serial.available()) {
     int ch = Serial.read();
+    Serial.print("menumode: "); Serial.println(menumode);
     Serial.print("mode: "); Serial.println(mode);
     Serial.print("filt: "); Serial.println(filt);
     Serial.print("stepsize: "); Serial.println(stepsize);
@@ -697,10 +735,8 @@ void loop() {
     Serial.print("vfo[VFOB]: "); Serial.println(vfo[VFOB]);
     Serial.print("vfomode[VFOA]: "); Serial.println(vfomode[VFOA]);
     Serial.print("vfomode[VFOB]: "); Serial.println(vfomode[VFOB]);
-    Serial.println();
+    Serial.println(); Serial.println();
     
   }
-
-
 }
   
