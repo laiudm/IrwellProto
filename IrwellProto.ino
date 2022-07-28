@@ -30,6 +30,9 @@
 #define ENC_A     PB12                    // Rotary encoder A
 #define ENC_B     PB13                    // Rotary encoder B
 
+//#define ENC_A     PC14                    // Rotary encoder A
+//#define ENC_B     PC15                    // Rotary encoder B
+
 Rotary r = Rotary(ENC_A,ENC_B);
 
 //----------   TFT setting  ------------------- 
@@ -57,6 +60,9 @@ ButtonEvents b = ButtonEvents(EVT_NOCHANGE);
 #define   SW_STEP      PA1                 
 #define   SW_MODE      PC14                 
 #define   SW_RIT       PC15
+
+//#define   SW_MODE      PB7                 
+//#define   SW_RIT       PA0
 
 #ifdef BLUEPILL
 #define   LED          PC13
@@ -112,14 +118,27 @@ void Rotary_enc(){
   }
 }
 
-// Can't use this yet - the menu code currently uses the encoder value multiple times before reseting it
-int8_t readEncoder() {
-  int8_t result;
-  noInterrupts();     
-  result = encoder_val;
+int readId;
+int8_t lastReadVal;
+
+// detect if there are dropped counts between reading and reseting.
+int8_t readEncoder(int id) {
+  //noInterrupts();     
+  lastReadVal = encoder_val;
+  //encoder_val = 0;  // future change; not possible yet
+  //interrupts();
+  readId = id;
+  return lastReadVal;
+}
+
+void resetEncoder(int id) {
+  if (encoder_val != lastReadVal) {
+    //aha, these values would be missed. Damn, never triggers
+    Serial.print("reset Encoder. reader id: ");Serial.print(readId); Serial.print(" reseter: "); Serial.print(id); 
+    Serial.print(" encoder_val: "); Serial.print(encoder_val); Serial.print(" lastReadVal: "); Serial.println(lastReadVal);
+  }
+  //encoder_val -= lastReadVal; // cheat & see if it improves things? Nope
   encoder_val = 0;
-  interrupts();
-  return result;
 }
 
 
@@ -271,9 +290,6 @@ int eeprom_addr;
 
 uint8_t eeprom_version;
 
-
-volatile bool change = true;
-
 // state variables
 
 uint8_t mode = MODE_USB;
@@ -311,10 +327,12 @@ const char* offon_label[]       = {"OFF", "ON"};
 
 //------------- display subsystem  --------------------------------
 
-void printBlanks(){ 
+void printBlanks(){
+  //Serial.println(" printBlanks");
   ucg.print("        ");
 }
 void setCursor(int x, int y) {
+  //Serial.print(" setCursor("); Serial.print(x); Serial.print(", "); Serial.print(y);Serial.println(")");
   ucg.setPrintPos(x*22, y*22+22);
 }
 
@@ -335,7 +353,7 @@ void printStep(int stepsize) {
 }
 
 void printRIT(int rit) {
-  setCursor(0, 6); ucg.print("RIT ");ucg.print(offon_label[rit]); 
+  setCursor(0, 6); ucg.print("RIT ");ucg.print(offon_label[rit]); ucg.print("  "); ucg.print(ritFreq); printBlanks();
 }
 
 //--------------- Business Logic---------------------------------------------
@@ -394,7 +412,6 @@ void triggerBandChange(int menu) {
 void triggerValueChange(int menu) {
   // give all values to the output routine
   updateAllFreq();
-  //Serial.print("Trigger on "); Serial.println(menu);
   printPrimaryVFO(vfosel);
   printSecondaryVFO(vfosel^1);
   printStep(stepsize);
@@ -452,6 +469,7 @@ void show_banner(){
 }
 
 void printmenuid(uint8_t menuid){ // output menuid in x.y format
+  Serial.print("printmenuid "); Serial.println(menuid);
   static const char separator[] = {'.', ' '};
   uint8_t ids[] = {(uint8_t)(menuid >> 4), (uint8_t)(menuid & 0xF)};
   for(int i = 0; i < 2; i++){
@@ -492,15 +510,16 @@ void actionCommon(uint8_t action, uint8_t *ptr, uint8_t size){
 }
 
 template<typename T> void paramAction(uint8_t action, volatile T& value, uint8_t menuid, const char* label, const char* enumArray[], int32_t _min, int32_t _max, void (*trigger)(int m)){
-  uint32_t delta = encoder_val;
+  int32_t delta = readEncoder(1);
   switch(action){
     case UPDATE:
     case UPDATE_MENU:
+      //if(menuid==0x18) Serial.print("In menu ritFreq ");Serial.println(delta);
       if (sizeof(T) == sizeof(uint32_t)) delta *= fstepRates[stepsize];  // large menu items use the tune-rate
       value = (int32_t)value + delta;
       if(     value < _min) value = _min;
       else if(value > _max) value = _max;
-      encoder_val = 0;
+      resetEncoder(2);
 
       //lcdnoCursor();
       printlabel(action, menuid, label);  // print normal/menu label
@@ -552,14 +571,15 @@ int8_t paramAction(uint8_t action, uint8_t id = ALL) { // list of parameters
     case MODEB:   paramAction(action, vfomode[VFOB],     0,        NULL,           NULL,         0,                    0, triggerNoop       ); break;
     case VERS:    paramAction(action, eeprom_version,    0,        NULL,           NULL,         0,                    0, triggerNoop       ); break;
     
-    // case NULL_:   menumode = NO_MENU; show_banner(); change = true; break;
+    // case NULL_:   menumode = NO_MENU; show_banner(); break;
     default:      if((action == NEXT_MENU) && (id != N_PARAMS)) 
-                      id = paramAction(action, max(1 /*0*/, min(N_PARAMS, id + ((encoder_val > 0) ? 1 : -1))) ); break;  // keep iterating util menu item found
+                      id = paramAction(action, max(1 /*0*/, min(N_PARAMS, id + ((readEncoder(3) > 0) ? 1 : -1))) ); break;  // keep iterating util menu item found
   }
   return id;  // needed?
 }
 
 void processMenuKey() {
+  Serial.println("processmenukey");
     if     (menumode == 0){ menumode = 1; paramAction(UPDATE_MENU, menu);}  // enter menu mode
     else if(menumode == 1){ menumode = 2; paramAction(UPDATE_MENU, menu);}                          // enter value selection screen
     else if(menumode >= 2){ Serial.println("test menu"); paramAction(SAVE, menu); menumode = 0; show_banner();}  // save value, and return to default screen
@@ -567,19 +587,19 @@ void processMenuKey() {
 
 void processEnterKey() {
   if     (menumode == 1){ menumode = 0; show_banner();}  
-  else if(menumode >= 2){ Serial.println("test enter"); menumode = 1; change = true; paramAction(UPDATE_MENU, menu); paramAction(SAVE, menu); } // save value, and return to menu mode
+  else if(menumode >= 2){ Serial.println("test enter"); menumode = 1; paramAction(UPDATE_MENU, menu); paramAction(SAVE, menu); } // save value, and return to menu mode
 
 }
 
 void processMenu() {
   if (menumode) {
-    int8_t encoder_change = encoder_val;
+    int8_t encoder_change = readEncoder(4);
     if((menumode == 1) && encoder_change){
       //Serial.println("menu - got encoder val "); Serial.println(encoder_change);
-      menu += encoder_val;   // Navigate through menu
+      menu += readEncoder(5);   // Navigate through menu
       menu = max(1 , min(menu, N_PARAMS));
       menu = paramAction(NEXT_MENU, menu);  // auto probe next menu item (gaps may exist)
-      encoder_val = 0;
+      resetEncoder(5);
     }
     if(encoder_change)
       paramAction(UPDATE_MENU, menu);  // update param with encoder change and display.
@@ -697,10 +717,10 @@ void loop() {
     processMenu();
   } else {
     // only process the encoder if not in menu mode. This is because encoder counts could occur during the slow screen painting
-    if (encoder_val) {
-      vfo[vfosel] += encoder_val*fstepRates[stepsize];
+    if (readEncoder(6)) {
+      vfo[vfosel] += readEncoder(7)*fstepRates[stepsize];
       triggerVFOChange();
-      encoder_val = 0;
+      resetEncoder(8);
     }
   }
 
