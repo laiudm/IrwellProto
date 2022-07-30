@@ -15,13 +15,11 @@
 
 //---------- Library include ----------
 
-//#include "Arduino.h"
 #include <Wire.h>
 #include <SPI.h>
 #include <EEPROM.h>
 
 #include "si5351a2.h" 
-#include "Rotary.h"                     
 #include "src/Ucglib.h"
 #include "ButtonEvents.h"
 
@@ -29,11 +27,6 @@
 
 #define ENC_A     PB12                    // Rotary encoder A
 #define ENC_B     PB13                    // Rotary encoder B
-
-//#define ENC_A     PC14                    // Rotary encoder A
-//#define ENC_B     PC15                    // Rotary encoder B
-
-Rotary r = Rotary(ENC_A,ENC_B);
 
 //----------   TFT setting  ------------------- 
 
@@ -95,27 +88,38 @@ typedef enum {MODE_LSB, MODE_USB, MODE_CW, MODE_AM, MODE_FM} modes;
 #define _N(a) sizeof(a)/sizeof(a[0])
 
 
-
-
-
 //---------- Rotary Encoder Processing -----------------------
 
 volatile int8_t encoder_val = 0;
 long interruptCount = 0;
 long lastInterruptCount = -1;
 int_fast32_t interruptsTimeExpired = 0; 
+ 
+void initRotary() {
+  pinMode( ENC_A, INPUT_PULLUP);
+  pinMode( ENC_B, INPUT_PULLUP);
+  attachInterrupt( ENC_A, Rotary_enc, CHANGE);
+  attachInterrupt( ENC_B, Rotary_enc, CHANGE);
+}
 
+// There were all sorts of problems getting the rotary encoder to work reliably.
+// This algorithm seems to work more reliably:
+// A "rotation event" is when both inputs have gone low;  rotation direction is determined by which input was the last to go low
+// Once a rotation event has occurred, detect new rotation events only after both inputs have returned high again.
 
-// interrupt routine
-void Rotary_enc(){  
-  static long freq = 0;
+void Rotary_enc() {
+  static bool rotationEvent = false;  // I could possibly roll this into the last_state variable, but 
+  static uint8_t last_state = 0;
+  
   interruptCount++;   // investigate very high interupt rate
-  unsigned char result = r.process();
-  if (result == DIR_CW) {
-    encoder_val++;
-  } else if (result == DIR_CCW) {
-    encoder_val--;
+  uint8_t state = (digitalRead(ENC_B) << 1) | digitalRead(ENC_A);
+  if (!rotationEvent && (state==0x0)) {
+      rotationEvent = true;
+      if (last_state & 1) encoder_val++; else encoder_val--;
+  } else if (rotationEvent && (state==0x3)) {
+    rotationEvent = false;
   }
+  last_state = state;
 }
 
 int readId;
@@ -133,12 +137,12 @@ int8_t readEncoder(int id) {
 
 void resetEncoder(int id) {
   if (encoder_val != lastReadVal) {
-    //aha, these values would be missed. Damn, never triggers
+    //aha, these values would be missed. Triggers a lot!
     Serial.print("reset Encoder. reader id: ");Serial.print(readId); Serial.print(" reseter: "); Serial.print(id); 
     Serial.print(" encoder_val: "); Serial.print(encoder_val); Serial.print(" lastReadVal: "); Serial.println(lastReadVal);
   }
-  //encoder_val -= lastReadVal; // cheat & see if it improves things? Nope
-  encoder_val = 0;
+  encoder_val -= lastReadVal; // cheat & see if it improves things? Yes. There are lots of dropped counts otherwise
+  //encoder_val = 0;
 }
 
 
@@ -616,13 +620,8 @@ void setup() {
   Serial.println("Starting setup");
   pinMode(LED, OUTPUT);
 #endif
-  
-  pinMode( ENC_A, INPUT_PULLUP);                  // PC13 pull up
-  pinMode( ENC_B, INPUT_PULLUP);                  // PC14
-  attachInterrupt( ENC_A, Rotary_enc, CHANGE);    // Encoder A
-  attachInterrupt( ENC_B, Rotary_enc, CHANGE);    //         B
 
-  delay(100);
+  initRotary();
   
   ucg.begin(UCG_FONT_MODE_SOLID);
   ucg.clearScreen();
@@ -642,7 +641,7 @@ void setup() {
   pinMode(OUT_USB,OUTPUT);                    // USB Mode
   pinMode(OUT_CW,OUTPUT);                     // CW Mode - G6LBQ added additional mode selection
   pinMode(OUT_AM,OUTPUT);                     // AM Mode - G6LBQ added additional mode selection
-  
+
   init_PCF8574();
 /* test display, font sizes
   setCursor(0, 0); ucg.print("Line 0");
