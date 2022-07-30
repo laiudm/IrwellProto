@@ -40,13 +40,9 @@
 #define CLK_SRC_PLL_A 0b00000000
 #define CLK_SRC_PLL_B 0b00100000
 
-#define XTAL_FREQ     25000000    // Crystal frequency for Hans' board
-
-#define TCAADDR 0x70
 
 //------------- memory define ------------
 
-uint32_t xtalFreq = XTAL_FREQ;    // 2017/9/29
 
 static const uint8_t msreg_base[] = {
   MS0_ADDR,
@@ -60,13 +56,6 @@ static const uint8_t ctrlreg_base[] = {
   CLK2_CTRL,
 };
 
-void tcaselect (uint8_t i) {
-  if (i > 7) return;
-
-  Wire.beginTransmission(TCAADDR);
-  Wire.write(1 << i);
-  Wire.endTransmission();
-}
 
 ////////////////////////////////////////////////////////////////////////
 // I2C write
@@ -87,7 +76,7 @@ void Si5351_write(uint8_t Reg , uint8_t Data){
 // denom is 0..1,048,575 (0xFFFFF)
 ///////////////////////////////////////////////////////////////////////
 
-void setupPLL(uint8_t port, uint8_t pll, uint8_t mult, uint32_t num, uint32_t denom){
+void setupPLL(uint8_t pll, uint8_t mult, uint32_t num, uint32_t denom){
   uint32_t P1;                            // PLL config register P1
   uint32_t P2;                            // PLL config register P2
   uint32_t P3;                            // PLL config register P3
@@ -115,7 +104,7 @@ void setupPLL(uint8_t port, uint8_t pll, uint8_t mult, uint32_t num, uint32_t de
 // register, it is a #define in si5351a.h
 ////////////////////////////////////////////////////////////////////////
 
-void setupMultisynth(uint8_t port, uint8_t synth, uint32_t divider, uint8_t rDiv){
+void setupMultisynth(uint8_t synth, uint32_t divider, uint8_t rDiv){
   uint32_t P1;                          // Synth config register P1
   uint32_t P2;                          // Synth config register P2
   uint32_t P3;                          // Synth config register P3
@@ -141,8 +130,7 @@ void setupMultisynth(uint8_t port, uint8_t synth, uint32_t divider, uint8_t rDiv
 // will switch off output CLK0
 ////////////////////////////////////////////////////////////////////////
 
-void si5351aOutputOff(uint8_t port, uint8_t channel){
-  tcaselect(port);
+void si5351aOutputOff(uint8_t channel){
   Si5351_write(msreg_base[channel], 0x80);        // Refer to SiLabs AN619 to see 
                                                   // bit values - 0x80 turns off the output stage
 }
@@ -159,17 +147,14 @@ void si5351aOutputOff(uint8_t port, uint8_t channel){
 // Note - this code assumes only a single CLK output is being used.
 ////////////////////////////////////////////////////////////////////////
 
-void si5351aSetFrequency(uint8_t port, uint8_t channel, uint32_t frequency){
+void si5351aSetFrequency(uint8_t channel, uint32_t frequency, uint32_t  xtalFreq){
   uint32_t pllFreq;
-//  uint32_t xtalFreq = XTAL_FREQ;        // 2017/9/29
   uint32_t l;
   float f;
   uint8_t mult;
   uint32_t num;
   uint32_t denom;
   uint32_t divider;
-  
-  tcaselect(port);
 
   divider = 900000000 / frequency;        // Calculate the division ratio. 900,000,000 is the maximum internal
                                           // PLL frequency: 900MHz
@@ -188,13 +173,13 @@ void si5351aSetFrequency(uint8_t port, uint8_t channel, uint32_t frequency){
   num = f;                                // the actual multiplier is mult + num / denom
   denom = 1048575;                        // For simplicity we set the denominator to the maximum 1048575
                                           // Set up PLL A with the calculated  multiplication ratio
-  setupPLL(port, MSNA_ADDR, mult, num, denom);
+  setupPLL(MSNA_ADDR, mult, num, denom);
                                           // Set up MultiSynth divider n, with the calculated divider.
                                           // The final R division stage can divide by a power of two, from 1..128.
                                           // reprented by constants SI_R_DIV1 to SI_R_DIV128 (see si5351a.h header file)
                                           // If you want to output frequencies below 1MHz, you have to use the
                                           // final R division stage
-  setupMultisynth(port, msreg_base[channel], divider, R_DIV_1);
+  setupMultisynth(msreg_base[channel], divider, R_DIV_1);
                                           // Reset the PLL. This causes a glitch in the output. For small changes to
                                           // the parameters, you don't need to reset the PLL, and there is no glitch
 //  Si5351_write(PLL_RESET, 0x20);

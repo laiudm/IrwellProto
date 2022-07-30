@@ -26,6 +26,7 @@
 //----------   Encoder setting  ---------------
 
 #define ENC_A     PB12                    // Rotary encoder A
+//#define ENC_A     PB14                    // Rotary encoder A
 #define ENC_B     PB13                    // Rotary encoder B
 
 //----------   TFT setting  ------------------- 
@@ -64,6 +65,10 @@ ButtonEvents b = ButtonEvents(EVT_NOCHANGE);
 #define   SW_TX        PC13               // G6LBQ> PTT - connect to Gnd for TX
 #endif
 
+#define debugOut       PB5                // a couple of debug outputs
+#define debugTriggered PB4
+
+
 #define   METER        PA2                // G6LBQ changed from PA1 to PA2    
 
 //---------  Si5351 Assignments ---------------------------
@@ -87,6 +92,28 @@ typedef enum {MODE_LSB, MODE_USB, MODE_CW, MODE_AM, MODE_FM} modes;
 
 #define _N(a) sizeof(a)/sizeof(a[0])
 
+// state variables
+
+uint8_t mode = MODE_USB;
+uint8_t filt = 0;
+uint8_t bandval = 3;
+uint8_t stepsize = 3;  //todo revisit - uSDX uses an enum
+uint32_t xtalfreq = 25000000;
+unsigned long if_bfo[]= {11056570, 11059840, 11058400, 11058200};
+enum vfo_t { VFOA=0, VFOB=1, SPLIT=2 };
+uint8_t vfosel = VFOA;
+int16_t rit = 0;
+int16_t ritFreq = 0;
+int32_t vfo[] = { 7074000, 14074000 };
+uint8_t vfomode[] = { MODE_USB, MODE_USB };
+
+static const uint32_t conversionOffsets[] { 
+  56059000, // LSB
+  33941000, // USB
+  56059000, // CW
+  56059000  // AM
+};
+
 
 //---------- Rotary Encoder Processing -----------------------
 
@@ -108,9 +135,10 @@ void initRotary() {
 // Once a rotation event has occurred, detect new rotation events only after both inputs have returned high again.
 
 void Rotary_enc() {
-  static bool rotationEvent = false;  // I could possibly roll this into the last_state variable, but 
+  static bool rotationEvent = false;  // this could possibly be rolled into the last_state variable, but code readability?
   static uint8_t last_state = 0;
-  
+
+  digitalWrite(debugOut,!digitalRead(debugOut));
   interruptCount++;   // investigate very high interupt rate
   uint8_t state = (digitalRead(ENC_B) << 1) | digitalRead(ENC_A);
   if (!rotationEvent && (state==0x0)) {
@@ -137,7 +165,7 @@ int8_t readEncoder(int id) {
 
 void resetEncoder(int id) {
   if (encoder_val != lastReadVal) {
-    //aha, these values would be missed. Triggers a lot!
+    //aha, these values would be missed if we weren't careful
     Serial.print("reset Encoder. reader id: ");Serial.print(readId); Serial.print(" reseter: "); Serial.print(id); 
     Serial.print(" encoder_val: "); Serial.print(encoder_val); Serial.print(" lastReadVal: "); Serial.println(lastReadVal);
   }
@@ -196,16 +224,31 @@ void select_BPF(long freq) {
   } 
 }
 
+// -----     Routine to interface to the TCA9548A -----
+
+#define TCAADDR 0x70
+
+void tcaselect (uint8_t i) {
+  if (i > 7) return;
+
+  Wire.beginTransmission(TCAADDR);
+  Wire.write(1 << i);
+  Wire.endTransmission();
+}
+
+
 // -----     Routines to interface to the Si5351s-----
 
 long currentFrequency[] = { -1, -1, -1 };   // track output frequences for changes
 
 void _setFrequency(uint8_t port, uint8_t channel, uint32_t frequency) {
 #ifndef MOCKI2C
-  si5351aSetFrequency(port, channel, frequency);
+  tcaselect(port);
+  si5351aSetFrequency(channel, frequency, xtalfreq);
 #endif
 #ifdef TRACEI2C
-  Serial.print("Si5351 port: "); Serial.print(port); Serial.print(", chl: "); Serial.print(channel); Serial.print(", freq: "); Serial.println(frequency);
+  Serial.print("Si5351 port: "); Serial.print(port); Serial.print(", chl: "); Serial.print(channel); Serial.print(", freq: "); Serial.print(frequency);
+  Serial.print(", xtalFreq: "); Serial.println(xtalfreq);
 #endif
 }
 
@@ -220,8 +263,9 @@ void setFrequency(uint8_t port, uint8_t channel, uint32_t frequency) {
 
 void disableFrequency(uint8_t port, uint8_t channel) {
   currentFrequency[port] = -1;  // erase the "cached" frequency
-#ifndef MOCKI2C  
-  si5351aOutputOff(port, channel);
+#ifndef MOCKI2C
+  tcaselect(port);
+  si5351aOutputOff(channel);
 #endif
 #ifdef TRACEI2C
   Serial.print("Si5351 disable port: "); Serial.print(port); Serial.print(", chl: "); Serial.println(channel);
@@ -294,27 +338,7 @@ int eeprom_addr;
 
 uint8_t eeprom_version;
 
-// state variables
 
-uint8_t mode = MODE_USB;
-uint8_t filt = 0;
-uint8_t bandval = 3;
-uint8_t stepsize = 3;  //todo revisit - uSDX uses an enum
-uint32_t xtalfreq = 25000000;
-unsigned long if_bfo[]= {11056570, 11059840, 11058400, 11058200};
-enum vfo_t { VFOA=0, VFOB=1, SPLIT=2 };
-uint8_t vfosel = VFOA;
-int16_t rit = 0;
-int16_t ritFreq = 0;
-int32_t vfo[] = { 7074000, 14074000 };
-uint8_t vfomode[] = { MODE_USB, MODE_USB };
-
-static const uint32_t conversionOffsets[] { 
-  56059000, // LSB
-  33941000, // USB
-  56059000, // CW
-  56059000  // AM
-};
 
 void lcdnoCursor() {};  // really is nothing to do here. Unless the display does have a cursor?
 
@@ -323,10 +347,10 @@ void lcdnoCursor() {};  // really is nothing to do here. Unless the display does
 
 const char* mode_label[]       = { "LSB", "USB", "CW ", "AM ", "FM " };
 const char* filt_label[]       = { "Full", "7", "6", "5", "4", "3", "2", "1" };
-const char* band_label[]        = { "160m", "80m", "60m", "40m", "30m", "20m", "17m", "15m", "12m", "10m", "6m" };
-const char* stepsize_label[]    = { "1Hz", "10Hz", "100Hz", "1KHz", "10KHz", "100KHz", "1MHz" };
-const char* vfosel_label[]      = { "VFO A", "VFO B"/*, "Split"*/ };
-const char* offon_label[]       = {"OFF", "ON"};
+const char* band_label[]       = { "160m", "80m", "60m", "40m", "30m", "20m", "17m", "15m", "12m", "10m", "6m" };
+const char* stepsize_label[]   = { "1Hz", "10Hz", "100Hz", "1KHz", "10KHz", "100KHz", "1MHz" };
+const char* vfosel_label[]     = { "VFO A", "VFO B"/*, "Split"*/ };
+const char* offon_label[]      = {"OFF", "ON"};
 
 
 //------------- display subsystem  --------------------------------
@@ -641,6 +665,9 @@ void setup() {
   pinMode(OUT_USB,OUTPUT);                    // USB Mode
   pinMode(OUT_CW,OUTPUT);                     // CW Mode - G6LBQ added additional mode selection
   pinMode(OUT_AM,OUTPUT);                     // AM Mode - G6LBQ added additional mode selection
+
+  pinMode(debugOut, OUTPUT);                  // temp for debugging
+  pinMode(debugTriggered, OUTPUT);
 
   init_PCF8574();
 /* test display, font sizes
