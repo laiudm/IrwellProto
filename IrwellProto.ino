@@ -109,12 +109,15 @@ int16_t  ritFreq = 0;
 uint32_t xtalfreq = 25000000;
 uint32_t if_bfo[]= {11056570, 11059840, 11058400, 11058200};
 int32_t  vfo[] = { 7074000, 14074000 };
-uint8_t  eeprom_version;
+uint16_t eeprom_version;
 
 // end of state variables stored in eeprom
 
 uint8_t lastTXInput = 0;   // captures last state and current state of TX input line.
 bool    transmitting = false;  // status indication - used to calcute VFO, BFO freqs
+
+uint32_t EEPROMautoSave = 0;
+#define EEPROMautoSaveTiming 5000  // in milliseconds. Too frequently would wear out the flash
 
 static const uint32_t fstepRates[] = {1, 10, 100, 1000, 10000, 100000, 1000000};
 #define fstepRatesSize (sizeof(fstepRates)/sizeof(fstepRates[0]))
@@ -289,49 +292,39 @@ void disableFrequency(uint8_t port, uint8_t channel) {
 
 int eeprom_addr;
 #define EEPROM_OFFSET 0x0
-#define get_version_id() 1
+#define get_version_id() 2
 
-void Fnc_eepINIT(){
-  uint16 dummy;
-  //Refer to ...\arduino-1.8.13\portable\packages\stm32duino\hardware\STM32F1\2021.5.31\libraries\EEPROM\EEPROM.cpp, EEPROM.h 
-  //Serial.print("EEPROM_PAGE0_BASE = "); Serial.print(EEPROM_PAGE0_BASE, HEX); Serial.print(" "); Serial.println(EEPROM_PAGE0_BASE == 0x801F000);
-  //Serial.print("EEPROM_PAGE1_BASE = "); Serial.print(EEPROM_PAGE1_BASE, HEX); Serial.print(" "); Serial.println(EEPROM_PAGE1_BASE == 0x801F800);
-  //Serial.print("EEPROM_PAGE_SIZE = ");  Serial.print(EEPROM_PAGE_SIZE,  HEX); Serial.print(" "); Serial.println(EEPROM_PAGE_SIZE  == 0x400);
-  //uint32_t addr = (uint32_t)&bandwrite;
-  //Serial.print("Addr = "); Serial.println(addr, HEX);
-  EEPROM.PageBase0 = 0x801F000;         // 0x801F800 default values. So these settings move the "eeprom" storage down a bit. Why? Not for the bootloader - it's at the start of memory
-  EEPROM.PageBase1 = 0x801F800;         // 0x801FC00 
-  EEPROM.PageSize  = 0x400;             // 1kB
-  dummy = EEPROM.init();
+void eeprom_init() {
+  EEPROM.init();  // I think default parameters are fine
 }
 
-uint32_t Fnc_eepRD(uint32_t adr){
-  uint32_t val = 0;
-  uint16 dat,dummy;  
-
-  dummy = EEPROM.read(adr,&dat);
-  val = dat << 16;
-  dummy = EEPROM.read(adr+1,&dat);
-  return val | dat;
+// temporary functions to test eeprom - remove when eeprom has been tested a bit more
+void EEPROM_read(uint16 Address, uint16 *Data){
+  Serial.print("EEPROM_read: from "); Serial.print((int) Address); Serial.print(", To: "); Serial.println((int)Data);
+  if (Address==23)
+    *Data = 1234; // test
+  else
+    *Data = 0x4321; // for 32 bits = 1126253345
 }
 
-void Fnc_eepWT(uint32_t dat,uint16 adr){
-  uint16 dummy,val;
-
-  val = dat & 0xffff;
-  dummy = EEPROM.write(adr+1,val);
-  val = dat >> 16;
-  val = val & 0xffff;
-  dummy = EEPROM.write(adr,val);
+void EEPROM_write(uint16 Address, uint16 Data) {
+  Serial.print("EEPROM_write: to "); Serial.print((int) Address); Serial.print(", Data: "); Serial.println(Data);
 }
 
-// todo - moch interfaces currently
+// The menu system reads & writes in units of 16 bits
+
 void eeprom_read_block (void *__dst, const void *__src, size_t __n) {
-  Serial.print("eeprom_read_block: from "); Serial.print((int) __src); Serial.print(", length: "); Serial.println(__n);
+  //Serial.print("eeprom_read_block: from "); Serial.print((int) __src); Serial.print(", length: "); Serial.println(__n);
+  for (int i=0; i<__n; i++) {
+    EEPROM.read( ((int)__src)+i,  (uint16_t *)__dst+i );
+  }
 };
 
 void eeprom_write_block(const void *__src, void *__dst, size_t __n) {
-  Serial.print("eeprom_write_block: to "); Serial.print((int) __dst); Serial.print(", length: "); Serial.println(__n);
+  //Serial.print("eeprom_write_block: to "); Serial.print((int) __dst); Serial.print(", length: "); Serial.println(__n);
+  for (int i=0; i<__n; i++) {
+    EEPROM.write( ((int)__dst)+i, *((uint16_t *)__src+i) ); // only update "eeprom" if the value has changed. 
+  }
 };
 
 // -----------menu system labels ----------------------------------
@@ -418,8 +411,14 @@ void updateAllFrquencyOutputs(uint8_t mode, int32_t freq, int32_t ifshift, int32
 
 //--------------- value change triggers --------------------------------------
 
+void setEEPROMautoSave() {
+  EEPROMautoSave = millis() + EEPROMautoSaveTiming;
+  //Serial.print("setEEPROMautoSave = "); Serial.println(EEPROMautoSave);
+}
+
 void updateAllFreq() {
   updateAllFrquencyOutputs(vfomode[vfosel], vfo[vfosel], if_bfo[vfomode[vfosel]], rit ? ritFreq : 0, transmitting);
+  setEEPROMautoSave();
 }
 
 // Band information - last 4 are made up. TODO - provide proper values
@@ -455,13 +454,15 @@ void triggerNoop(int menu) {}
 
 void setstepUp(){
   stepsize = (stepsize + 1) % fstepRatesSize;
-  printStep(stepsize); 
+  printStep(stepsize);
+  setEEPROMautoSave();
 }
 
 void setstepDown() {
   if (stepsize==0) stepsize = fstepRatesSize;
   stepsize--;
   printStep(stepsize);
+  setEEPROMautoSave();
 }
 
 void bandUp() {
@@ -563,7 +564,7 @@ template<typename T> void paramAction(uint8_t action, volatile T& value, uint8_t
       break;
       
     default:
-      actionCommon(action, (uint8_t *)&value, sizeof(value));
+      actionCommon(action, (uint8_t *)&value, sizeof(value)/2); // /2 because the eeprom lib stores in units of 16 bits
       break;
   }
 }
@@ -677,17 +678,44 @@ void setup() {
   setCursor(0, 3); ucg.print("Line 3");
   setCursor(0, 4);ucg.print(42);
 */
-  /*
-  // Load parameters from EEPROM, reset to factory defaults when stored values are from a different version
+
+  eeprom_init();
+  // Load parameters from EEPROM, reset to factory defaults when 
+  // 1. stored values are from a different version
+  // 2. SW_KEY pressed during power-up
+  Serial.println("checking version");
   paramAction(LOAD, VERS);
-  if((eeprom_version != get_version_id()) || !digitalRead(SW_BAND)){  // EEPROM clean: if key pressed or version signature in EEPROM does NOT corresponds with this firmware
+  if((eeprom_version != get_version_id()) || !digitalRead(SW_STEP)){
+    Serial.print("eeprom_version: "); Serial.println(eeprom_version);
     eeprom_version = get_version_id();
     paramAction(SAVE);  // save default parameter values
     setCursor(0, 1); ucg.print("Reset settings..");
-    delay(500); // wdt_reset();
-  } else {
-    paramAction(LOAD);  // load all parameters
+    delay(1000);
   }
+  paramAction(LOAD);  // load all parameters
+  
+  /*
+  Serial.print("eeprom_version before: "); Serial.println(eeprom_version);
+  paramAction(LOAD, VERS);
+  Serial.print("eeprom_version after read: "); Serial.println(eeprom_version);
+  eeprom_version = 1234;
+  paramAction(SAVE, VERS);
+  paramAction(LOAD, VERS);
+  Serial.print("eeprom_version after writing 1234: "); Serial.println(eeprom_version);
+  */
+  /*Serial.print("xtalfreq before: "); Serial.println(xtalfreq);
+  paramAction(LOAD, SIFXTAL);
+  Serial.print("xtalfreq after: "); Serial.println(xtalfreq);
+  paramAction(SAVE, SIFXTAL);
+  */
+  /*
+  Serial.print("xtalfreq before: "); Serial.println(xtalfreq);
+  paramAction(LOAD, SIFXTAL);
+  Serial.print("xtalfreq after read: "); Serial.println(xtalfreq);
+  xtalfreq = 0x12345678;
+  paramAction(SAVE, SIFXTAL);
+  paramAction(LOAD, SIFXTAL);
+  Serial.print("xtalfreq after writing 0x12345678: "); Serial.println(xtalfreq);
   */
   show_banner();
   triggerValueChange(0);
@@ -742,8 +770,9 @@ void loop() {
   if (menumode) {
     processMenu();
   } else {
-    // only process the encoder if not in menu mode. This is because encoder counts could occur during the slow screen painting
+    // only process the encoder when not in menu mode. This is because encoder counts could occur during the slow screen painting
     if (readEncoder(6)) {
+      // update the frequency that's tuned
       vfo[vfosel] += readEncoder(7)*fstepRates[stepsize];
       triggerVFOChange();
       resetEncoder(8);
@@ -767,6 +796,11 @@ void loop() {
       printTXstate(transmitting);
       updateAllFreq();
       break;
+  }
+
+  if (EEPROMautoSave && (millis()>EEPROMautoSave)) {
+    EEPROMautoSave = 0;
+    paramAction(SAVE);  // save current parameter values. Only changed values are actually written
   }
   
   // debug output
