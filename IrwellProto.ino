@@ -92,20 +92,32 @@ typedef enum {MODE_LSB, MODE_USB, MODE_CW, MODE_AM, MODE_FM} modes;
 
 #define _N(a) sizeof(a)/sizeof(a[0])
 
-// state variables
-
-uint8_t mode = MODE_USB;
-uint8_t filt = 0;
-uint8_t bandval = 3;
-uint8_t stepsize = 3;  //todo revisit - uSDX uses an enum
-uint32_t xtalfreq = 25000000;
-unsigned long if_bfo[]= {11056570, 11059840, 11058400, 11058200};
 enum vfo_t { VFOA=0, VFOB=1, SPLIT=2 };
-uint8_t vfosel = VFOA;
-int16_t rit = 0;
-int16_t ritFreq = 0;
-int32_t vfo[] = { 7074000, 14074000 };
-uint8_t vfomode[] = { MODE_USB, MODE_USB };
+
+// state variables stored in eeprom 
+// all these variables _MUST_ be 16bit or 32bit
+// their initialisation values are stored in the eeprom on a "factory" reset
+// As a convenience they are in the order they appear in the menu
+
+uint16_t vfomode[] = { MODE_USB, MODE_USB };
+uint16_t filt = 0;
+uint16_t bandval = 3;
+uint16_t stepsize = 3;  //todo revisit - uSDX uses an enum
+uint16_t vfosel = VFOA;
+int16_t  rit = 0;
+int16_t  ritFreq = 0;
+uint32_t xtalfreq = 25000000;
+uint32_t if_bfo[]= {11056570, 11059840, 11058400, 11058200};
+int32_t  vfo[] = { 7074000, 14074000 };
+uint8_t  eeprom_version;
+
+// end of state variables stored in eeprom
+
+uint8_t lastTXInput = 0;   // captures last state and current state of TX input line.
+bool    transmitting = false;  // status indication - used to calcute VFO, BFO freqs
+
+static const uint32_t fstepRates[] = {1, 10, 100, 1000, 10000, 100000, 1000000};
+#define fstepRatesSize (sizeof(fstepRates)/sizeof(fstepRates[0]))
 
 static const uint32_t conversionOffsets[] { 
   56059000, // LSB
@@ -118,8 +130,8 @@ static const uint32_t conversionOffsets[] {
 //---------- Rotary Encoder Processing -----------------------
 
 volatile int8_t encoder_val = 0;
-long interruptCount = 0;
-long lastInterruptCount = -1;
+int32_t interruptCount = 0;
+int32_t lastInterruptCount = -1;
 int_fast32_t interruptsTimeExpired = 0; 
  
 void initRotary() {
@@ -208,7 +220,7 @@ void select_bank(int8_t bank) {
   currentBank = bank;
 }
 
-void select_BPF(long freq) {
+void select_BPF(uint32_t freq) {
 
   // HF Band Pass Filter logic added by G6LBQ
   if        (freq <  1600000){ select_bank(0);
@@ -239,7 +251,7 @@ void tcaselect (uint8_t i) {
 
 // -----     Routines to interface to the Si5351s-----
 
-long currentFrequency[] = { -1, -1, -1 };   // track output frequences for changes
+uint32_t currentFrequency[] = { -1, -1, -1 };   // track output frequences for changes
 
 void _setFrequency(uint8_t port, uint8_t channel, uint32_t frequency) {
 #ifndef MOCKI2C
@@ -275,13 +287,17 @@ void disableFrequency(uint8_t port, uint8_t channel) {
 
 //----------  EEPROM Routines  ---------
 
+int eeprom_addr;
+#define EEPROM_OFFSET 0x0
+#define get_version_id() 1
+
 void Fnc_eepINIT(){
   uint16 dummy;
   //Refer to ...\arduino-1.8.13\portable\packages\stm32duino\hardware\STM32F1\2021.5.31\libraries\EEPROM\EEPROM.cpp, EEPROM.h 
   //Serial.print("EEPROM_PAGE0_BASE = "); Serial.print(EEPROM_PAGE0_BASE, HEX); Serial.print(" "); Serial.println(EEPROM_PAGE0_BASE == 0x801F000);
   //Serial.print("EEPROM_PAGE1_BASE = "); Serial.print(EEPROM_PAGE1_BASE, HEX); Serial.print(" "); Serial.println(EEPROM_PAGE1_BASE == 0x801F800);
   //Serial.print("EEPROM_PAGE_SIZE = ");  Serial.print(EEPROM_PAGE_SIZE,  HEX); Serial.print(" "); Serial.println(EEPROM_PAGE_SIZE  == 0x400);
-  //long addr = (long)&bandwrite;
+  //uint32_t addr = (uint32_t)&bandwrite;
   //Serial.print("Addr = "); Serial.println(addr, HEX);
   EEPROM.PageBase0 = 0x801F000;         // 0x801F800 default values. So these settings move the "eeprom" storage down a bit. Why? Not for the bootloader - it's at the start of memory
   EEPROM.PageBase1 = 0x801F800;         // 0x801FC00 
@@ -289,8 +305,8 @@ void Fnc_eepINIT(){
   dummy = EEPROM.init();
 }
 
-long Fnc_eepRD(uint16 adr){
-  long val = 0;
+uint32_t Fnc_eepRD(uint32_t adr){
+  uint32_t val = 0;
   uint16 dat,dummy;  
 
   dummy = EEPROM.read(adr,&dat);
@@ -299,7 +315,7 @@ long Fnc_eepRD(uint16 adr){
   return val | dat;
 }
 
-void Fnc_eepWT(long dat,uint16 adr){
+void Fnc_eepWT(uint32_t dat,uint16 adr){
   uint16 dummy,val;
 
   val = dat & 0xffff;
@@ -317,34 +333,6 @@ void eeprom_read_block (void *__dst, const void *__src, size_t __n) {
 void eeprom_write_block(const void *__src, void *__dst, size_t __n) {
   Serial.print("eeprom_write_block: to "); Serial.print((int) __dst); Serial.print(", length: "); Serial.println(__n);
 };
-
-//------------- temp vars, routines --------------------------------
-
-uint8_t lastTXInput = 0;   // captures last state and current state of TX input line.
-bool transmitting = false;  // status indication - used to calcute VFO, BFO freqs
-
-long freq;
-long freqrit;
-long vfofreq;
-long ifshift;
-long firstIF;
-bool flg_bfochg;
-bool flagrit;
-int fmode;
-long fstep;
-static const long fstepRates[] = {1, 10, 100, 1000, 10000, 100000, 1000000};
-#define fstepRatesSize (sizeof(fstepRates)/sizeof(fstepRates[0]))
-
-int eeprom_addr;
-#define EEPROM_OFFSET 0x0
-#define get_version_id() 1
-
-uint8_t eeprom_version;
-
-
-
-void lcdnoCursor() {};  // really is nothing to do here. Unless the display does have a cursor?
-
 
 // -----------menu system labels ----------------------------------
 
@@ -562,7 +550,6 @@ template<typename T> void paramAction(uint8_t action, volatile T& value, uint8_t
       else if(value > _max) value = _max;
       resetEncoder(2);
 
-      //lcdnoCursor();
       printlabel(action, menuid, label);  // print normal/menu label
       if(enumArray == NULL){  // print value
         if((_min < 0) && (value >= 0)) ucg.print('+');  // add + sign for positive values, in case negative values are supported
@@ -786,7 +773,7 @@ void loop() {
   if (Serial.available()) {
     int ch = Serial.read();
     Serial.print("menumode: "); Serial.println(menumode);
-    Serial.print("mode: "); Serial.println(mode);
+    Serial.print("mode: "); Serial.println(vfomode[vfosel]);
     Serial.print("filt: "); Serial.println(filt);
     Serial.print("stepsize: "); Serial.println(stepsize);
     Serial.print("vfosel: "); Serial.println(vfosel);
