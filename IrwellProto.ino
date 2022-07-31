@@ -320,6 +320,9 @@ void eeprom_write_block(const void *__src, void *__dst, size_t __n) {
 
 //------------- temp vars, routines --------------------------------
 
+uint8_t lastTXInput = 0;   // captures last state and current state of TX input line.
+bool transmitting = false;  // status indication - used to calcute VFO, BFO freqs
+
 long freq;
 long freqrit;
 long vfofreq;
@@ -361,7 +364,7 @@ void printBlanks(){
 }
 void setCursor(int x, int y) {
   //Serial.print(" setCursor("); Serial.print(x); Serial.print(", "); Serial.print(y);Serial.println(")");
-  ucg.setPrintPos(x*22, y*22+22);
+  ucg.setPrintPos(x*12, y*22+22);
 }
 
 void printVFO(int sel) {
@@ -384,6 +387,14 @@ void printRIT(int rit) {
   setCursor(0, 6); ucg.print("RIT ");ucg.print(offon_label[rit]); ucg.print("  "); ucg.print(ritFreq); printBlanks();
 }
 
+void printTXstate(bool tx) {
+  setCursor(8, 7);
+  if (tx) {
+    ucg.setColor(255,0,0); ucg.print("--TX--"); ucg.setColor(255,255,255);
+  } else {
+    ucg.print("      ");
+  }
+}
 //--------------- Business Logic---------------------------------------------
 
 #define firstIF 45000000L       // Added by G6LBQ 01/07/2022
@@ -400,10 +411,12 @@ void updateModeOutputs(uint8_t mode) {
 // Original code was for single conversion IF at 11.059MHz so 11.059MHz + VFO Frequency
 // 01/07/2022 Changes are for dual conversion so 45MHz firstIF + VFO Frequency 
 
-void updateAllFrquencyOutputs(uint8_t mode, int32_t freq, int32_t ifshift, int32_t freqRIT) {
+void updateAllFrquencyOutputs(uint8_t mode, int32_t freq, int32_t ifshift, int32_t freqRIT, bool transmitting) {
   select_BPF(freq);
   updateModeOutputs(mode);
   int32_t vfofreq = freq + firstIF + freqRIT;
+  if ((mode==MODE_CW) && transmitting)  // is in the original code. Is this correct? Isn't rx offset from the tuned freq to create the tone (or BFO adds)?
+    vfofreq += CW_TONE;
   setFrequency(VFO_PORT, VFO_CHL, vfofreq);
   
   if (mode!=MODE_AM) {
@@ -418,12 +431,12 @@ void updateAllFrquencyOutputs(uint8_t mode, int32_t freq, int32_t ifshift, int32
 //--------------- value change triggers --------------------------------------
 
 void updateAllFreq() {
-  updateAllFrquencyOutputs(vfomode[vfosel], vfo[vfosel], if_bfo[vfomode[vfosel]], rit ? ritFreq : 0);
+  updateAllFrquencyOutputs(vfomode[vfosel], vfo[vfosel], if_bfo[vfomode[vfosel]], rit ? ritFreq : 0, transmitting);
 }
 
-// Band information - last 4 are made up.
-const uint8_t bandMode[]   = {MODE_LSB, MODE_LSB,  MODE_CW, MODE_USB, MODE_USB, MODE_USB,  MODE_AM,  MODE_FM, MODE_USB, MODE_USB };
-const uint32_t bandFreq[] = { 3500000,  7000000, 10100000, 14000000, 21000000, 28000000, 30000000, 31000000, 32000000, 33000000 };
+// Band information - last 4 are made up. TODO - provide proper values
+const uint8_t bandMode[]  = { MODE_LSB, MODE_LSB,  MODE_CW, MODE_USB, MODE_USB, MODE_USB,  MODE_AM,  MODE_FM, MODE_USB, MODE_USB };
+const uint32_t bandFreq[] = {  3500000,  7000000, 10100000, 14000000, 21000000, 28000000, 30000000, 31000000, 32000000, 33000000 };
 
 void triggerVFOChange() {
   updateAllFreq();
@@ -750,24 +763,25 @@ void loop() {
     }
   }
 
-  if (digitalRead(SW_TX)==LOW) {
-    // transmit processing 
-    // TODO:
-    // On entering transmit:
-    // * Update the display
-    // * Alter the vfo frequency depending on CW mode. Existing code was
-    //  if(fmode == MODE_CW)                        // CW?
-    //     Vfo_out(vfofreq + CW_TONE);               // Vfofreq+700Hz
-    //  else
-    //    Vfo_out(vfofreq);                         // vfo out
-    //    }
-    // Do NOT busy-wait on finishing transmit
-    // On exiting transmit:
-    // * update the dispay
-    // * revert the vfo frequency (although original code doesn't appear to do this?
+  // transmit input processing: 
+  // Assume the signal is electronically created and does _NOT_ need debouncing
+  // Look for transitions on the input signal
+  lastTXInput = (lastTXInput<<4) | !(digitalRead(SW_TX)); //SX_TX is active low
+  switch(lastTXInput) {
+    case 0x01:
+      // transition from rx to tx
+      transmitting = true;
+      updateAllFreq();
+      printTXstate(transmitting);
+      break;
+    case 0x10:
+      // transition from tx to rx
+      transmitting = false;
+      printTXstate(transmitting);
+      updateAllFreq();
+      break;
   }
   
-
   // debug output
   if (Serial.available()) {
     int ch = Serial.read();
