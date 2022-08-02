@@ -99,15 +99,15 @@ enum vfo_t { VFOA=0, VFOB=1, SPLIT=2 };
 // their initialisation values are stored in the eeprom on a "factory" reset
 // As a convenience they are in the order they appear in the menu
 
-uint16_t vfomode[] = { MODE_USB, MODE_USB };
-uint16_t filt = 0;
-uint16_t bandval = 3;
-uint16_t stepsize = 3;  //todo revisit - uSDX uses an enum
+int16_t  vfomode[] = { MODE_USB, MODE_USB };
+int16_t  filt = 0;
+int16_t  bandval = 3;
+int16_t  stepsize = 3;  //todo revisit - uSDX uses an enum
 uint16_t vfosel = VFOA;
 int16_t  rit = 0;
 int16_t  ritFreq = 0;
 uint32_t xtalfreq = 25000000;
-uint32_t if_bfo[]= {11056570, 11059840, 11058400, 11058200};
+uint32_t if_bfo[]= {11056570, 11059840, 11058400, 11058200, 11058200};
 int32_t  vfo[] = { 7074000, 14074000 };
 uint16_t eeprom_version;
 
@@ -126,7 +126,8 @@ static const uint32_t conversionOffsets[] {
   56059000, // LSB
   33941000, // USB
   56059000, // CW
-  56059000  // AM
+  56059000, // AM
+  56059000  // FM
 };
 
 
@@ -292,7 +293,7 @@ void disableFrequency(uint8_t port, uint8_t channel) {
 
 int eeprom_addr;
 #define EEPROM_OFFSET 0x0
-#define get_version_id() 2
+#define get_version_id() 3
 
 void eeprom_init() {
   EEPROM.init();  // I think default parameters are fine
@@ -331,7 +332,12 @@ void eeprom_write_block(const void *__src, void *__dst, size_t __n) {
 
 const char* mode_label[]       = { "LSB", "USB", "CW ", "AM ", "FM " };
 const char* filt_label[]       = { "Full", "7", "6", "5", "4", "3", "2", "1" };
-const char* band_label[]       = { "160m", "80m", "60m", "40m", "30m", "20m", "17m", "15m", "12m", "10m", "6m" };
+
+// Band information - last 4 are made up. TODO - provide proper values
+const char* band_label[]       = { "160m",      "80m",    "60m",   "40m",    "30m",    "20m",    "17m",    "15m",    "12m",     "10m",     "6m" };
+const uint8_t bandMode[]  =      { MODE_LSB, MODE_LSB,  MODE_CW, MODE_USB, MODE_USB, MODE_USB,  MODE_AM,  MODE_FM, MODE_USB, MODE_USB, MODE_USB };
+const uint32_t bandFreq[] =      {  3500000,  7000000, 10100000, 14000000, 21000000, 28000000, 30000000, 31000000, 32000000, 33000000, 34000000 };
+
 const char* stepsize_label[]   = { "1Hz", "10Hz", "100Hz", "1KHz", "10KHz", "100KHz", "1MHz" };
 const char* vfosel_label[]     = { "VFO A", "VFO B"/*, "Split"*/ };
 const char* offon_label[]      = {"OFF", "ON"};
@@ -397,6 +403,22 @@ void updateModeOutputs(uint8_t mode) {
 // Original code was for single conversion IF at 11.059MHz so 11.059MHz + VFO Frequency
 // 01/07/2022 Changes are for dual conversion so 45MHz firstIF + VFO Frequency 
 
+void updateAllFrquencyOutputsDualConversion(uint8_t mode, int32_t freq, int32_t ifshift, int32_t freqRIT, bool transmitting) {
+  select_BPF(freq);
+  updateModeOutputs(mode);
+  int32_t vfofreq = freq + firstIF + freqRIT;
+  if ((mode==MODE_CW) && transmitting)  // is in the original code. Is this correct? Isn't rx offset from the tuned freq to create the tone (or BFO adds)?
+    vfofreq += CW_TONE;
+  setFrequency(VFO_PORT, VFO_CHL, vfofreq);
+  
+  if (mode!=MODE_AM) {
+    setFrequency(BFO_PORT, BFO_CHL, ifshift);
+  } else {
+    disableFrequency(BFO_PORT, BFO_CHL);
+  }
+  setFrequency(CONV_PORT, CONV_CHL, conversionOffsets[mode]);
+}
+
 void updateAllFrquencyOutputs(uint8_t mode, int32_t freq, int32_t ifshift, int32_t freqRIT, bool transmitting) {
   select_BPF(freq);
   updateModeOutputs(mode);
@@ -425,10 +447,6 @@ void updateAllFreq() {
   updateAllFrquencyOutputs(vfomode[vfosel], vfo[vfosel], if_bfo[vfomode[vfosel]], rit ? ritFreq : 0, transmitting);
   setEEPROMautoSave();
 }
-
-// Band information - last 4 are made up. TODO - provide proper values
-const uint8_t bandMode[]  = { MODE_LSB, MODE_LSB,  MODE_CW, MODE_USB, MODE_USB, MODE_USB,  MODE_AM,  MODE_FM, MODE_USB, MODE_USB };
-const uint32_t bandFreq[] = {  3500000,  7000000, 10100000, 14000000, 21000000, 28000000, 30000000, 31000000, 32000000, 33000000 };
 
 void triggerVFOChange() {
   updateAllFreq();
@@ -495,7 +513,7 @@ uint8_t menu = 1;  // current parameter id selected in menu
 
 
 enum action_t { UPDATE, UPDATE_MENU, NEXT_MENU, LOAD, SAVE, SKIP, NEXT_CH };
-enum params_t {NULL_, MODE, FILTER, BAND, STEP, VFOSEL, RIT, RITFREQ, SIFXTAL, IF_LSB, IF_USB, IF_CW, IF_AM, FREQA, FREQB, MODEA, MODEB, VERS, ALL=0xff};
+enum params_t {NULL_, MODE, FILTER, BAND, STEP, VFOSEL, RIT, RITFREQ, SIFXTAL, IF_LSB, IF_USB, IF_CW, IF_AM, IF_FM, FREQA, FREQB, MODEA, MODEB, VERS, ALL=0xff};
 #define N_PARAMS 12                 // number of (visible) parameters
 #define N_ALL_PARAMS (N_PARAMS+5)  // total of all parameters
 
@@ -591,17 +609,18 @@ int8_t paramAction(uint8_t action, uint8_t id = ALL) { // list of parameters
     case ALL:     for(id = 1; id != N_ALL_PARAMS+1; id++) paramAction(action, id);  // for all parameters
     // Visible parameters
     case MODE:    paramAction(action, vfomode[vfosel],0x11,      "Mode",     mode_label,        0,     _N(mode_label)-1, triggerValueChange); break;
-    case FILTER:  paramAction(action, filt,           0x13, "NR Filter",     filt_label,        0,     _N(filt_label)-1, triggerValueChange); break;
-    case BAND:    paramAction(action, bandval,        0x14,      "Band",     band_label,        0,     _N(band_label)-1, triggerBandChange ); break;
-    case STEP:    paramAction(action, stepsize,       0x15, "Tune Rate", stepsize_label,        0, _N(stepsize_label)-1, triggerValueChange); break;
-    case VFOSEL:  paramAction(action, vfosel,         0x16,  "VFO Mode",   vfosel_label,        0,   _N(vfosel_label)-1, triggerValueChange); break;
-    case RIT:     paramAction(action, rit,            0x17,       "RIT",    offon_label,        0,                    1, triggerValueChange); break;
-    case RITFREQ: paramAction(action, ritFreq,        0x18,"RIT Offset",           NULL,    -1000,                 1000, triggerRITChange  ); break;
-    case SIFXTAL: paramAction(action, xtalfreq,       0x83,  "Ref freq",           NULL, 14000000,             28000000, triggerValueChange); break;
-    case IF_LSB:  paramAction(action, if_bfo[0],      0x84,    "IF-LSB",           NULL, 14000000,             28000000, triggerValueChange); break;
-    case IF_USB:  paramAction(action, if_bfo[1],      0x85,    "IF-USB",           NULL, 14000000,             28000000, triggerValueChange); break;
-    case IF_CW:   paramAction(action, if_bfo[2],      0x86,     "IF-CW",           NULL, 14000000,             28000000, triggerValueChange); break;
-    case IF_AM:   paramAction(action, if_bfo[3],      0x87,     "IF-AM",           NULL, 14000000,             28000000, triggerValueChange); break;
+    case FILTER:  paramAction(action, filt,           0x12, "NR Filter",     filt_label,        0,     _N(filt_label)-1, triggerValueChange); break;
+    case BAND:    paramAction(action, bandval,        0x13,      "Band",     band_label,        0,     _N(band_label)-1, triggerBandChange ); break;
+    case STEP:    paramAction(action, stepsize,       0x14, "Tune Rate", stepsize_label,        0, _N(stepsize_label)-1, triggerValueChange); break;
+    case VFOSEL:  paramAction(action, vfosel,         0x15,  "VFO Mode",   vfosel_label,        0,   _N(vfosel_label)-1, triggerValueChange); break;
+    case RIT:     paramAction(action, rit,            0x16,       "RIT",    offon_label,        0,                    1, triggerValueChange); break;
+    case RITFREQ: paramAction(action, ritFreq,        0x17,"RIT Offset",           NULL,    -1000,                 1000, triggerRITChange  ); break;
+    case SIFXTAL: paramAction(action, xtalfreq,       0x81,  "Ref freq",           NULL, 14000000,             28000000, triggerValueChange); break;
+    case IF_LSB:  paramAction(action, if_bfo[0],      0x82,    "IF-LSB",           NULL, 14000000,             28000000, triggerValueChange); break;
+    case IF_USB:  paramAction(action, if_bfo[1],      0x83,    "IF-USB",           NULL, 14000000,             28000000, triggerValueChange); break;
+    case IF_CW:   paramAction(action, if_bfo[2],      0x84,     "IF-CW",           NULL, 14000000,             28000000, triggerValueChange); break;
+    case IF_AM:   paramAction(action, if_bfo[3],      0x85,     "IF-AM",           NULL, 14000000,             28000000, triggerValueChange); break;
+    case IF_FM:   paramAction(action, if_bfo[4],      0x86,     "IF-FM",           NULL, 14000000,             28000000, triggerValueChange); break;
 
     // invisible parameters. These are here only for eeprom save/restore
     case FREQA:   paramAction(action, vfo[VFOA],         0,        NULL,           NULL,         0,                    0, triggerNoop       ); break;
