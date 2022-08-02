@@ -364,8 +364,13 @@ void printStep(int stepsize) {
   setCursor(0, 5); ucg.print("Tune Rate ");ucg.print(stepsize_label[stepsize]);printBlanks();
 }
 
-void printRIT(int rit) {
-  setCursor(0, 6); ucg.print("RIT ");ucg.print(offon_label[rit]); ucg.print("  "); ucg.print(ritFreq); printBlanks();
+void printRITFreq(int16_t freq) {
+  setCursor(9, 6); ucg.print(freq); printBlanks();
+}
+
+void printRIT(int rit, int16_t freq) {
+  setCursor(0, 6); ucg.print("RIT ");ucg.print(offon_label[rit]); ucg.print("  ");
+  printRITFreq(freq);
 }
 
 void printTXstate(bool tx) {
@@ -430,6 +435,11 @@ void triggerVFOChange() {
   printPrimaryVFO(vfosel);
 }
 
+void triggerRITChange(int menu) {
+  updateAllFreq();
+  printRITFreq(ritFreq);
+}
+
 void triggerBandChange(int menu) {
   vfomode[vfosel] = bandMode[bandval];
   vfo[vfosel] = bandFreq[bandval];
@@ -443,7 +453,7 @@ void triggerValueChange(int menu) {
   printPrimaryVFO(vfosel);
   printSecondaryVFO(vfosel^1);
   printStep(stepsize);
-  printRIT(rit);
+  printRIT(rit, ritFreq);
 }
 
 void triggerNoop(int menu) {}
@@ -586,7 +596,7 @@ int8_t paramAction(uint8_t action, uint8_t id = ALL) { // list of parameters
     case STEP:    paramAction(action, stepsize,       0x15, "Tune Rate", stepsize_label,        0, _N(stepsize_label)-1, triggerValueChange); break;
     case VFOSEL:  paramAction(action, vfosel,         0x16,  "VFO Mode",   vfosel_label,        0,   _N(vfosel_label)-1, triggerValueChange); break;
     case RIT:     paramAction(action, rit,            0x17,       "RIT",    offon_label,        0,                    1, triggerValueChange); break;
-    case RITFREQ: paramAction(action, ritFreq,        0x18,"RIT Offset",           NULL,    -1000,                 1000, triggerValueChange); break;
+    case RITFREQ: paramAction(action, ritFreq,        0x18,"RIT Offset",           NULL,    -1000,                 1000, triggerRITChange  ); break;
     case SIFXTAL: paramAction(action, xtalfreq,       0x83,  "Ref freq",           NULL, 14000000,             28000000, triggerValueChange); break;
     case IF_LSB:  paramAction(action, if_bfo[0],      0x84,    "IF-LSB",           NULL, 14000000,             28000000, triggerValueChange); break;
     case IF_USB:  paramAction(action, if_bfo[1],      0x85,    "IF-USB",           NULL, 14000000,             28000000, triggerValueChange); break;
@@ -806,17 +816,26 @@ void loop() {
   // debug output
   if (Serial.available()) {
     int ch = Serial.read();
+    setCursor(0, 8);
+    long dt = micros();
+    //displayRawText("Time this string1234", 20, 20, DISPLAY_RED, DISPLAY_DARKGREEN);
+    ucg.print("Time this string1234");
+    dt = micros() - dt;
+    Serial.print("Time for 20 chars: "); Serial.println(dt);
+    
     Serial.print("menumode: "); Serial.println(menumode);
     Serial.print("mode: "); Serial.println(vfomode[vfosel]);
     Serial.print("filt: "); Serial.println(filt);
     Serial.print("stepsize: "); Serial.println(stepsize);
     Serial.print("vfosel: "); Serial.println(vfosel);
     Serial.print("rit: "); Serial.println(rit);
+    Serial.print("ritFreq: "); Serial.println(ritFreq);
     Serial.print("vfo[VFOA]: "); Serial.println(vfo[VFOA]);
     Serial.print("vfo[VFOB]: "); Serial.println(vfo[VFOB]);
     Serial.print("vfomode[VFOA]: "); Serial.println(vfomode[VFOA]);
     Serial.print("vfomode[VFOB]: "); Serial.println(vfomode[VFOB]);
     Serial.println(); Serial.println();
+    
     
   }
 }
