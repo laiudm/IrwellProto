@@ -107,8 +107,10 @@ uint16_t vfosel = VFOA;
 int16_t  rit = 0;
 int16_t  ritFreq = 0;
 uint32_t xtalfreq = 25000000;
-uint32_t if_bfo[]= {11056570, 11059840, 11058400, 11058200, 11058200};
+uint32_t ifFreq[]  = {11056570,   11059840, 11058400, 11058200, 11058200};
+uint32_t BFOFreq[] = {11056570,   11059840, 11058400,        0,        0};
 int32_t  vfo[] = { 7074000, 14074000 };
+int32_t  convFreq = 45000000;
 uint16_t eeprom_version;
 
 // end of state variables stored in eeprom
@@ -403,10 +405,10 @@ void updateModeOutputs(uint8_t mode) {
 // Original code was for single conversion IF at 11.059MHz so 11.059MHz + VFO Frequency
 // 01/07/2022 Changes are for dual conversion so 45MHz firstIF + VFO Frequency 
 
-void updateAllFrquencyOutputsDualConversion(uint8_t mode, int32_t freq, int32_t ifshift, int32_t freqRIT, bool transmitting) {
+void updateAllFrquencyOutputsDualConversionOld(uint8_t mode, int32_t freq, int32_t ifshift, int32_t freqRIT, bool transmitting) {
   select_BPF(freq);
   updateModeOutputs(mode);
-  int32_t vfofreq = freq + firstIF + freqRIT;
+  uint32_t vfofreq = freq + firstIF + freqRIT;
   if ((mode==MODE_CW) && transmitting)  // is in the original code. Is this correct? Isn't rx offset from the tuned freq to create the tone (or BFO adds)?
     vfofreq += CW_TONE;
   setFrequency(VFO_PORT, VFO_CHL, vfofreq);
@@ -419,20 +421,46 @@ void updateAllFrquencyOutputsDualConversion(uint8_t mode, int32_t freq, int32_t 
   setFrequency(CONV_PORT, CONV_CHL, conversionOffsets[mode]);
 }
 
-void updateAllFrquencyOutputs(uint8_t mode, int32_t freq, int32_t ifshift, int32_t freqRIT, bool transmitting) {
+void updateAllFrquencyOutputsDualConversion(uint8_t mode, int32_t freq, int32_t ifshift, int32_t freqRIT, bool transmitting) {
   select_BPF(freq);
   updateModeOutputs(mode);
-  int32_t vfofreq = freq + firstIF + freqRIT;
-  if ((mode==MODE_CW) && transmitting)  // is in the original code. Is this correct? Isn't rx offset from the tuned freq to create the tone (or BFO adds)?
-    vfofreq += CW_TONE;
+  uint32_t vfofreq = freq + firstIF;
   setFrequency(VFO_PORT, VFO_CHL, vfofreq);
-  
-  if (mode!=MODE_AM) {
-    setFrequency(BFO_PORT, BFO_CHL, ifshift);
-  } else {
-    disableFrequency(BFO_PORT, BFO_CHL);
+  switch(mode) {
+    case MODE_USB: MODE_LSB:
+      setFrequency(BFO_PORT, BFO_CHL, bfoFreq);
+      break;
+    case MODE_CW:
+      setFrequency(BFO_PORT, BFO_CHL, bfoFreq + CW_TONE);
+      break;
+    case MODE_AM:
+      disableFrequency(BFO_PORT, BFO_CHL);
+      break;
+    case MODE_FM:
+      disableFrequency(BFO_PORT, BFO_CHL);
+      break;
   }
-  setFrequency(CONV_PORT, CONV_CHL, conversionOffsets[mode]);
+}
+
+void updateAllFrquencyOutputs(uint8_t mode, int32_t freq, int32_t finalIF, int32_t bfoFreq, int32_t freqRIT, bool transmitting) {
+  select_BPF(freq);
+  updateModeOutputs(mode);
+  uint32_t vfofreq = freq + finalIF + freqRIT;
+  setFrequency(VFO_PORT, VFO_CHL, vfofreq);
+  switch(mode) {
+    case MODE_USB: MODE_LSB:
+      setFrequency(BFO_PORT, BFO_CHL, bfoFreq);
+      break;
+    case MODE_CW:
+      setFrequency(BFO_PORT, BFO_CHL, bfoFreq + CW_TONE);
+      break;
+    case MODE_AM:
+      disableFrequency(BFO_PORT, BFO_CHL);
+      break;
+    case MODE_FM:
+      disableFrequency(BFO_PORT, BFO_CHL);
+      break;
+  }
 }
 
 
@@ -444,7 +472,7 @@ void setEEPROMautoSave() {
 }
 
 void updateAllFreq() {
-  updateAllFrquencyOutputs(vfomode[vfosel], vfo[vfosel], if_bfo[vfomode[vfosel]], rit ? ritFreq : 0, transmitting);
+  updateAllFrquencyOutputs(vfomode[vfosel], vfo[vfosel], ifFreq[vfomode[vfosel]], BFOFreq[vfosel], rit ? ritFreq : 0, transmitting);
   setEEPROMautoSave();
 }
 
@@ -513,8 +541,8 @@ uint8_t menu = 1;  // current parameter id selected in menu
 
 
 enum action_t { UPDATE, UPDATE_MENU, NEXT_MENU, LOAD, SAVE, SKIP, NEXT_CH };
-enum params_t {NULL_, MODE, FILTER, BAND, STEP, VFOSEL, RIT, RITFREQ, SIFXTAL, IF_LSB, IF_USB, IF_CW, IF_AM, IF_FM, FREQA, FREQB, MODEA, MODEB, VERS, ALL=0xff};
-#define N_PARAMS 12                 // number of (visible) parameters
+enum params_t {NULL_, MODE, FILTER, BAND, STEP, VFOSEL, RIT, RITFREQ, SIFXTAL, IF_LSB, IF_USB, IF_CW, IF_AM, IF_FM, BFO_LSB, BFO_USB, BFO_CW, FREQA, FREQB, MODEA, MODEB, VERS, ALL=0xff};
+#define N_PARAMS 16                 // number of (visible) parameters
 #define N_ALL_PARAMS (N_PARAMS+5)  // total of all parameters
 
 
@@ -616,11 +644,14 @@ int8_t paramAction(uint8_t action, uint8_t id = ALL) { // list of parameters
     case RIT:     paramAction(action, rit,            0x16,       "RIT",    offon_label,        0,                    1, triggerValueChange); break;
     case RITFREQ: paramAction(action, ritFreq,        0x17,"RIT Offset",           NULL,    -1000,                 1000, triggerRITChange  ); break;
     case SIFXTAL: paramAction(action, xtalfreq,       0x81,  "Ref freq",           NULL, 14000000,             28000000, triggerValueChange); break;
-    case IF_LSB:  paramAction(action, if_bfo[0],      0x82,    "IF-LSB",           NULL, 14000000,             28000000, triggerValueChange); break;
-    case IF_USB:  paramAction(action, if_bfo[1],      0x83,    "IF-USB",           NULL, 14000000,             28000000, triggerValueChange); break;
-    case IF_CW:   paramAction(action, if_bfo[2],      0x84,     "IF-CW",           NULL, 14000000,             28000000, triggerValueChange); break;
-    case IF_AM:   paramAction(action, if_bfo[3],      0x85,     "IF-AM",           NULL, 14000000,             28000000, triggerValueChange); break;
-    case IF_FM:   paramAction(action, if_bfo[4],      0x86,     "IF-FM",           NULL, 14000000,             28000000, triggerValueChange); break;
+    case IF_LSB:  paramAction(action, ifFreq[0],      0x82,    "IF-LSB",           NULL, 14000000,             28000000, triggerValueChange); break;
+    case IF_USB:  paramAction(action, ifFreq[1],      0x83,    "IF-USB",           NULL, 14000000,             28000000, triggerValueChange); break;
+    case IF_CW:   paramAction(action, ifFreq[2],      0x84,     "IF-CW",           NULL, 14000000,             28000000, triggerValueChange); break;
+    case IF_AM:   paramAction(action, ifFreq[3],      0x85,     "IF-AM",           NULL, 14000000,             28000000, triggerValueChange); break;
+    case IF_FM:   paramAction(action, ifFreq[4],      0x86,     "IF-FM",           NULL, 14000000,             28000000, triggerValueChange); break;
+    case BFO_LSB: paramAction(action, BFOFreq[0],     0x87,   "BFO-LSB",           NULL, 14000000,             28000000, triggerValueChange); break;
+    case BFO_USB: paramAction(action, BFOFreq[1],     0x88,   "BFO-USB",           NULL, 14000000,             28000000, triggerValueChange); break;
+    case BFO_CW:  paramAction(action, BFOFreq[2],     0x89,    "BFO-CW",           NULL, 14000000,             28000000, triggerValueChange); break;
 
     // invisible parameters. These are here only for eeprom save/restore
     case FREQA:   paramAction(action, vfo[VFOA],         0,        NULL,           NULL,         0,                    0, triggerNoop       ); break;
