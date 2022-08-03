@@ -420,7 +420,7 @@ void updateAllFrquencyOutputsDualConversionOld(uint8_t mode, int32_t freq, int32
   }
   setFrequency(CONV_PORT, CONV_CHL, conversionOffsets[mode]);
 }
-
+/*
 void updateAllFrquencyOutputsDualConversion(uint8_t mode, int32_t freq, int32_t ifshift, int32_t freqRIT, bool transmitting) {
   select_BPF(freq);
   updateModeOutputs(mode);
@@ -441,6 +441,7 @@ void updateAllFrquencyOutputsDualConversion(uint8_t mode, int32_t freq, int32_t 
       break;
   }
 }
+*/
 
 void updateAllFrquencyOutputs(uint8_t mode, int32_t freq, int32_t finalIF, int32_t bfoFreq, int32_t freqRIT, bool transmitting) {
   select_BPF(freq);
