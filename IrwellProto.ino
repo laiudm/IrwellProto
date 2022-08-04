@@ -302,7 +302,7 @@ void disableFrequency(uint8_t port, uint8_t channel) {
 
 int eeprom_addr;
 #define EEPROM_OFFSET 0x0
-#define get_version_id() 3
+#define get_version_id() 4
 
 void eeprom_init() {
   EEPROM.init();  // I think default parameters are fine
