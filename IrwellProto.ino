@@ -258,8 +258,9 @@ void tcaselect (uint8_t i) {
 // -----     Routines to interface to the Si5351s-----
 
 uint32_t currentFrequency[] = { -1, -1, -1 };   // track output frequences for changes
+uint32_t currentXtalFreq = -1;
 
-void _setFrequency(uint8_t port, uint8_t channel, uint32_t frequency) {
+void _setFrequency(uint8_t port, uint8_t channel, uint32_t frequency, uint32_t xtalFreq) {
 #ifndef MOCKI2C
   tcaselect(port);
   si5351aSetFrequency(channel, frequency, xtalfreq);
@@ -270,12 +271,18 @@ void _setFrequency(uint8_t port, uint8_t channel, uint32_t frequency) {
 #endif
 }
 
-void setFrequency(uint8_t port, uint8_t channel, uint32_t frequency) {
+void setFrequency(uint8_t port, uint8_t channel, uint32_t frequency, uint32_t xtalFreq) {
+  Serial.print("setFrquency port: "); Serial.print(port); Serial.print(", chl: "); Serial.print(channel); Serial.print(", freq: "); Serial.println(frequency);
+  if (xtalFreq != currentXtalFreq) {
+    // invalidate the "cache"
+    currentFrequency[0] = - 1; currentFrequency[1] = - 1; currentFrequency[2] = - 1;;
+    currentXtalFreq = xtalFreq;
+  }
   // don't need to track port and channel; port is unique
   if (currentFrequency[port] == frequency)
     // it's already set to the correct frequency; nothing further to do here
     return;
-  _setFrequency(port, channel, frequency);
+  _setFrequency(port, channel, frequency, xtalFreq);
   currentFrequency[port] = frequency;
 }
 
@@ -405,20 +412,20 @@ void updateModeOutputs(uint8_t mode) {
 // Original code was for single conversion IF at 11.059MHz so 11.059MHz + VFO Frequency
 // 01/07/2022 Changes are for dual conversion so 45MHz firstIF + VFO Frequency 
 
-void updateAllFrquencyOutputsDualConversionOld(uint8_t mode, int32_t freq, int32_t ifshift, int32_t freqRIT, bool transmitting) {
+void updateAllFrquencyOutputsDualConversionOld(uint8_t mode, int32_t freq, int32_t ifshift, int32_t freqRIT, bool transmitting, int32_t xtalFreq) {
   select_BPF(freq);
   updateModeOutputs(mode);
   uint32_t vfofreq = freq + firstIF + freqRIT;
   if ((mode==MODE_CW) && transmitting)  // is in the original code. Is this correct? Isn't rx offset from the tuned freq to create the tone (or BFO adds)?
     vfofreq += CW_TONE;
-  setFrequency(VFO_PORT, VFO_CHL, vfofreq);
+  setFrequency(VFO_PORT, VFO_CHL, vfofreq, xtalFreq);
   
   if (mode!=MODE_AM) {
-    setFrequency(BFO_PORT, BFO_CHL, ifshift);
+    setFrequency(BFO_PORT, BFO_CHL, ifshift, xtalFreq);
   } else {
     disableFrequency(BFO_PORT, BFO_CHL);
   }
-  setFrequency(CONV_PORT, CONV_CHL, conversionOffsets[mode]);
+  setFrequency(CONV_PORT, CONV_CHL, conversionOffsets[mode], xtalFreq);
 }
 /*
 void updateAllFrquencyOutputsDualConversion(uint8_t mode, int32_t freq, int32_t ifshift, int32_t freqRIT, bool transmitting) {
@@ -443,17 +450,17 @@ void updateAllFrquencyOutputsDualConversion(uint8_t mode, int32_t freq, int32_t 
 }
 */
 
-void updateAllFrquencyOutputs(uint8_t mode, int32_t freq, int32_t finalIF, int32_t bfoFreq, int32_t freqRIT, bool transmitting) {
+void updateAllFrquencyOutputs(uint8_t mode, int32_t freq, int32_t finalIF, int32_t bfoFreq, int32_t freqRIT, bool transmitting, int32_t xtalFreq) {
   select_BPF(freq);
   updateModeOutputs(mode);
   uint32_t vfofreq = freq + finalIF + freqRIT;
-  setFrequency(VFO_PORT, VFO_CHL, vfofreq);
+  setFrequency(VFO_PORT, VFO_CHL, vfofreq, xtalFreq);
   switch(mode) {
     case MODE_USB: MODE_LSB:
-      setFrequency(BFO_PORT, BFO_CHL, bfoFreq);
+      setFrequency(BFO_PORT, BFO_CHL, bfoFreq, xtalFreq);
       break;
     case MODE_CW:
-      setFrequency(BFO_PORT, BFO_CHL, bfoFreq + CW_TONE);
+      setFrequency(BFO_PORT, BFO_CHL, bfoFreq + CW_TONE, xtalFreq);
       break;
     case MODE_AM:
       disableFrequency(BFO_PORT, BFO_CHL);
@@ -473,7 +480,7 @@ void setEEPROMautoSave() {
 }
 
 void updateAllFreq() {
-  updateAllFrquencyOutputs(vfomode[vfosel], vfo[vfosel], ifFreq[vfomode[vfosel]], BFOFreq[vfosel], rit ? ritFreq : 0, transmitting);
+  updateAllFrquencyOutputs(vfomode[vfosel], vfo[vfosel], ifFreq[vfomode[vfosel]], BFOFreq[vfomode[vfosel]], rit ? ritFreq : 0, transmitting, xtalfreq);
   setEEPROMautoSave();
 }
 
@@ -538,7 +545,7 @@ void bandDown() {
 
 enum menu_t { NO_MENU, MENU_SELECTED, MENU_VALUE };
 uint8_t menumode = 0;  // 0=not in menu, 1=selects menu item, 2=selects parameter value //todo - use enums
-uint8_t menu = 1;  // current parameter id selected in menu
+int8_t  menu = 1;  // current parameter id selected in menu
 
 
 enum action_t { UPDATE, UPDATE_MENU, NEXT_MENU, LOAD, SAVE, SKIP, NEXT_CH };
@@ -601,7 +608,6 @@ template<typename T> void paramAction(uint8_t action, volatile T& value, uint8_t
   switch(action){
     case UPDATE:
     case UPDATE_MENU:
-      //if(menuid==0x18) Serial.print("In menu ritFreq ");Serial.println(delta);
       if (sizeof(T) == sizeof(uint32_t)) delta *= fstepRates[stepsize];  // large menu items use the tune-rate
       value = (int32_t)value + delta;
       if(     value < _min) value = _min;
@@ -744,16 +750,19 @@ void setup() {
   // Load parameters from EEPROM, reset to factory defaults when 
   // 1. stored values are from a different version
   // 2. SW_KEY pressed during power-up
+  
   Serial.println("checking version");
   paramAction(LOAD, VERS);
+  Serial.print("On initial load eeprom_version: "); Serial.println(eeprom_version);
   if((eeprom_version != get_version_id()) || !digitalRead(SW_STEP)){
-    Serial.print("eeprom_version: "); Serial.println(eeprom_version);
+    Serial.print("Reload - eeprom_version: "); Serial.println(eeprom_version);
     eeprom_version = get_version_id();
     paramAction(SAVE);  // save default parameter values
     setCursor(0, 1); ucg.print("Reset settings..");
     delay(1000);
   }
   paramAction(LOAD);  // load all parameters
+  Serial.print("After Load-all eeprom_version: "); Serial.println(eeprom_version);
   
   /*
   Serial.print("eeprom_version before: "); Serial.println(eeprom_version);
@@ -763,13 +772,8 @@ void setup() {
   paramAction(SAVE, VERS);
   paramAction(LOAD, VERS);
   Serial.print("eeprom_version after writing 1234: "); Serial.println(eeprom_version);
-  */
-  /*Serial.print("xtalfreq before: "); Serial.println(xtalfreq);
-  paramAction(LOAD, SIFXTAL);
-  Serial.print("xtalfreq after: "); Serial.println(xtalfreq);
-  paramAction(SAVE, SIFXTAL);
-  */
-  /*
+  
+  
   Serial.print("xtalfreq before: "); Serial.println(xtalfreq);
   paramAction(LOAD, SIFXTAL);
   Serial.print("xtalfreq after read: "); Serial.println(xtalfreq);
@@ -778,6 +782,7 @@ void setup() {
   paramAction(LOAD, SIFXTAL);
   Serial.print("xtalfreq after writing 0x12345678: "); Serial.println(xtalfreq);
   */
+  
   show_banner();
   triggerValueChange(0);
 }
