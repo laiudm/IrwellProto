@@ -132,6 +132,17 @@ static const uint32_t conversionOffsets[] {
   56059000  // FM
 };
 
+//------------- menu system --------------------------------
+
+enum menu_t { NO_MENU, MENU_SELECTED, MENU_VALUE };
+uint8_t menumode = 0;  // 0=not in menu, 1=selects menu item, 2=selects parameter value //todo - use enums
+int8_t  menu = 1;  // current parameter id selected in menu
+
+
+enum action_t { UPDATE, UPDATE_MENU, NEXT_MENU, LOAD, SAVE, SKIP, NEXT_CH };
+enum params_t {NULL_, MODE, FILTER, BAND, STEP, VFOSEL, RIT, RITFREQ, SIFXTAL, IF_LSB, IF_USB, IF_CW, IF_AM, IF_FM, BFO_LSB, BFO_USB, BFO_CW, FREQA, FREQB, MODEA, MODEB, VERS, ALL=0xff};
+#define N_PARAMS 16                 // number of (visible) parameters
+#define N_ALL_PARAMS (N_PARAMS+5)  // total of all parameters
 
 //---------- Rotary Encoder Processing -----------------------
 
@@ -305,7 +316,9 @@ int eeprom_addr;
 #define get_version_id() 4
 
 void eeprom_init() {
-  EEPROM.init();  // I think default parameters are fine
+  uint16_t status = EEPROM.init();  // I think default parameters are fine
+  if (status != EEPROM_OK)
+    Serial.print("Eeprom init error: "); Serial.println(status);  
 }
 
 // temporary functions to test eeprom - remove when eeprom has been tested a bit more
@@ -324,16 +337,23 @@ void EEPROM_write(uint16 Address, uint16 Data) {
 // The menu system reads & writes in units of 16 bits
 
 void eeprom_read_block (void *__dst, const void *__src, size_t __n) {
-  //Serial.print("eeprom_read_block: from "); Serial.print((int) __src); Serial.print(", length: "); Serial.println(__n);
+  //Serial.print("eeprom_read_block: from addr "); Serial.print((int) __src); Serial.print(", length: "); Serial.println(__n);
   for (int i=0; i<__n; i++) {
-    EEPROM.read( ((int)__src)+i,  (uint16_t *)__dst+i );
+    uint16_t status = EEPROM.read( ((int)__src)+i,  (uint16_t *)__dst+i );
+    if (status != EEPROM_OK) {
+      Serial.print("Eeprom read error: "); Serial.print(status); Serial.print(" Read from ");Serial.println(*(int *)__src);
+    }
   }
+  Serial.print("eeprom_read_block: from addr "); Serial.print((int) __src); Serial.print(", length: "); Serial.print(__n); Serial.print(" value: "); Serial.println(*(uint16_t *)__dst); 
 };
 
 void eeprom_write_block(const void *__src, void *__dst, size_t __n) {
-  //Serial.print("eeprom_write_block: to "); Serial.print((int) __dst); Serial.print(", length: "); Serial.println(__n);
+  Serial.print("eeprom_write_block: to addr "); Serial.print((int) __dst); Serial.print(", length: "); Serial.print(__n); Serial.print(" value: "); Serial.println( *(uint16_t *)__src); 
   for (int i=0; i<__n; i++) {
-    EEPROM.write( ((int)__dst)+i, *((uint16_t *)__src+i) ); // only update "eeprom" if the value has changed. 
+    uint16_t status = EEPROM.write( ((int)__dst)+i, *((uint16_t *)__src+i) ); // only update "eeprom" if the value has changed.
+    if (status != EEPROM_OK) {
+      Serial.print("Eeprom write error: "); Serial.print(status); Serial.print(" Write to ");Serial.println((int) __dst);
+    }
   }
 };
 
@@ -481,7 +501,6 @@ void setEEPROMautoSave() {
 
 void updateAllFreq() {
   updateAllFrquencyOutputs(vfomode[vfosel], vfo[vfosel], ifFreq[vfomode[vfosel]], BFOFreq[vfomode[vfosel]], rit ? ritFreq : 0, transmitting, xtalfreq);
-  setEEPROMautoSave();
 }
 
 void triggerVFOChange() {
@@ -498,17 +517,10 @@ void triggerBandChange(int menu) {
   vfomode[vfosel] = bandMode[bandval];
   vfo[vfosel] = bandFreq[bandval];
   triggerValueChange(0);
+  setEEPROMautoSave();
 }
 
-// Anything could have changed so calculate _everything_
-void triggerValueChange(int menu) {
-  // give all values to the output routine
-  updateAllFreq();
-  printPrimaryVFO(vfosel);
-  printSecondaryVFO(vfosel^1);
-  printStep(stepsize);
-  printRIT(rit, ritFreq);
-}
+
 
 void triggerNoop(int menu) {}
 
@@ -540,18 +552,7 @@ void bandDown() {
   triggerBandChange(0);
 }
 
-
-//------------- menu system --------------------------------
-
-enum menu_t { NO_MENU, MENU_SELECTED, MENU_VALUE };
-uint8_t menumode = 0;  // 0=not in menu, 1=selects menu item, 2=selects parameter value //todo - use enums
-int8_t  menu = 1;  // current parameter id selected in menu
-
-
-enum action_t { UPDATE, UPDATE_MENU, NEXT_MENU, LOAD, SAVE, SKIP, NEXT_CH };
-enum params_t {NULL_, MODE, FILTER, BAND, STEP, VFOSEL, RIT, RITFREQ, SIFXTAL, IF_LSB, IF_USB, IF_CW, IF_AM, IF_FM, BFO_LSB, BFO_USB, BFO_CW, FREQA, FREQB, MODEA, MODEB, VERS, ALL=0xff};
-#define N_PARAMS 16                 // number of (visible) parameters
-#define N_ALL_PARAMS (N_PARAMS+5)  // total of all parameters
+// menu system code
 
 
 void show_banner(){
@@ -589,7 +590,7 @@ void printlabel(uint8_t action, uint8_t menuid, const char* label){
   }
 }
 
-void actionCommon(uint8_t action, uint8_t *ptr, uint8_t size){
+void actionCommon(uint8_t action, uint16_t *ptr, uint8_t size){
   switch(action){
     case LOAD:
       eeprom_read_block((void *)ptr, (const void *)eeprom_addr, size);
@@ -627,7 +628,7 @@ template<typename T> void paramAction(uint8_t action, volatile T& value, uint8_t
       break;
       
     default:
-      actionCommon(action, (uint8_t *)&value, sizeof(value)/2); // /2 because the eeprom lib stores in units of 16 bits
+      actionCommon(action, (uint16_t *)&value, sizeof(value)/2); // /2 because the eeprom lib stores in units of 16 bits
       break;
   }
 }
@@ -703,6 +704,21 @@ void processMenu() {
   
 }
 
+// Anything could have changed so calculate _everything_
+void triggerValueChange(int menu) {
+  if (menu == 0x11) {
+    Serial.println("hack triggered");
+    // need to save the VFO's mode too. This is temporary, so just save all for simplicity
+    paramAction((int)SAVE);
+  }
+  // give all values to the output routine
+  updateAllFreq();
+  printPrimaryVFO(vfosel);
+  printSecondaryVFO(vfosel^1);
+  printStep(stepsize);
+  printRIT(rit, ritFreq);
+}
+
 //------------------  Initialization -------------------------
  
 void setup() {
@@ -749,12 +765,15 @@ void setup() {
   eeprom_init();
   // Load parameters from EEPROM, reset to factory defaults when 
   // 1. stored values are from a different version
-  // 2. SW_KEY pressed during power-up
+  // 2. SW_STEP pressed during power-up
   
   Serial.println("checking version");
   paramAction(LOAD, VERS);
   Serial.print("On initial load eeprom_version: "); Serial.println(eeprom_version);
   if((eeprom_version != get_version_id()) || !digitalRead(SW_STEP)){
+    if (!digitalRead(SW_STEP)) {
+      Serial.println("forced eeprom reload");
+    }
     Serial.print("Reload - eeprom_version: "); Serial.println(eeprom_version);
     eeprom_version = get_version_id();
     paramAction(SAVE);  // save default parameter values
@@ -842,6 +861,7 @@ void loop() {
       vfo[vfosel] += readEncoder(7)*fstepRates[stepsize];
       triggerVFOChange();
       resetEncoder(8);
+      setEEPROMautoSave();
     }
   }
 
