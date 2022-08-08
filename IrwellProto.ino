@@ -14,7 +14,7 @@
 #define DEBUG
 
 //---------- Library include ----------
-
+#include <stdarg.h>
 #include <Wire.h>
 #include <SPI.h>
 #include <EEPROM.h>

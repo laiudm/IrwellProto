@@ -131,7 +131,7 @@ void setupMultisynth(uint8_t synth, uint32_t divider, uint8_t rDiv){
 ////////////////////////////////////////////////////////////////////////
 
 void si5351aOutputOff(uint8_t channel){
-  Si5351_write(msreg_base[channel], 0x80);        // Refer to SiLabs AN619 to see 
+  Si5351_write(ctrlreg_base[channel], 0x80);        // Refer to SiLabs AN619 to see 
                                                   // bit values - 0x80 turns off the output stage
 }
 
