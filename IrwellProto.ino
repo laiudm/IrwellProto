@@ -768,13 +768,13 @@ void setup() {
   // 2. SW_STEP pressed during power-up
 
   Serial.print("Input SW_STEP value before delay is: "); Serial.println(digitalRead(SW_STEP)); 
-  delay(200); // give any external Capacitances plenty of time to charge
+  delay(200); // ensure input buttons are valid by giving any external Capacitances plenty of time to charge
   Serial.print("Input SW_STEP value after delay is: "); Serial.println(digitalRead(SW_STEP)); 
   Serial.println("checking version");
   paramAction(LOAD, VERS);
   Serial.print("On initial load eeprom_version: "); Serial.println(eeprom_version);
-  //if((eeprom_version != get_version_id()) || !digitalRead(SW_STEP)){
-  if( (eeprom_version != get_version_id()) ){
+  if((eeprom_version != get_version_id()) || !digitalRead(SW_STEP)){
+  //if( (eeprom_version != get_version_id()) ){
     if (!digitalRead(SW_STEP)) {
       Serial.println("forced eeprom reload");
     }
