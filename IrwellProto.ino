@@ -99,7 +99,7 @@ enum vfo_t { VFOA=0, VFOB=1, SPLIT=2 };
 // their initialisation values are stored in the eeprom on a "factory" reset
 // As a convenience they are in the order they appear in the menu
 
-int16_t  vfomode[] = { MODE_USB, MODE_USB };
+int16_t  mode = MODE_USB;
 int16_t  filt = 0;
 int16_t  bandval = 3;
 int16_t  stepsize = 3;  //todo revisit - uSDX uses an enum
@@ -112,6 +112,8 @@ uint32_t BFOFreq[] = {11056570,   11059840, 11058400,        0,        0};
 int32_t  vfo[] = { 7074000, 14074000 };
 int32_t  convFreq = 45000000;
 uint16_t eeprom_version;
+
+#define get_version_id() 5
 
 // end of state variables stored in eeprom
 
@@ -140,9 +142,9 @@ int8_t  menu = 1;  // current parameter id selected in menu
 
 
 enum action_t { UPDATE, UPDATE_MENU, NEXT_MENU, LOAD, SAVE, SKIP, NEXT_CH };
-enum params_t {NULL_, MODE, FILTER, BAND, STEP, VFOSEL, RIT, RITFREQ, SIFXTAL, IF_LSB, IF_USB, IF_CW, IF_AM, IF_FM, BFO_LSB, BFO_USB, BFO_CW, FREQA, FREQB, MODEA, MODEB, VERS, ALL=0xff};
+enum params_t {NULL_, MODE, FILTER, BAND, STEP, VFOSEL, RIT, RITFREQ, SIFXTAL, IF_LSB, IF_USB, IF_CW, IF_AM, IF_FM, BFO_LSB, BFO_USB, BFO_CW, FREQA, FREQB, VERS, ALL=0xff};
 #define N_PARAMS 16                 // number of (visible) parameters
-#define N_ALL_PARAMS (N_PARAMS+5)  // total of all parameters
+#define N_ALL_PARAMS (N_PARAMS+3)  // total of all parameters
 
 //---------- Rotary Encoder Processing -----------------------
 
@@ -313,7 +315,6 @@ void disableFrequency(uint8_t port, uint8_t channel) {
 
 int eeprom_addr;
 #define EEPROM_OFFSET 0x0
-#define get_version_id() 4
 
 void eeprom_init() {
   uint16_t status = EEPROM.init();  // I think default parameters are fine
@@ -383,33 +384,37 @@ void setCursor(int x, int y) {
   ucg.setPrintPos(x*12, y*22+22);
 }
 
+void printMode(int mode) {
+  setCursor(0 ,3); ucg.print("Mode: "); ucg.print(mode_label[mode]); 
+}
+
 void printVFO(int sel) {
-  ucg.print(vfosel_label[sel]); ucg.print(" ");ucg.print(mode_label[vfomode[sel]]); ucg.print(" ");ucg.print(vfo[sel]);printBlanks();
+  ucg.print(vfosel_label[sel]); ucg.print(" "); ucg.print(vfo[sel]);printBlanks();
 }
 
 void printPrimaryVFO(int sel) {
-  setCursor(0, 3); printVFO(sel);
-}
-
-void printSecondaryVFO(int sel) {
   setCursor(0, 4); printVFO(sel);
 }
 
+void printSecondaryVFO(int sel) {
+  setCursor(0, 5); printVFO(sel);
+}
+
 void printStep(int stepsize) {
-  setCursor(0, 5); ucg.print("Tune Rate ");ucg.print(stepsize_label[stepsize]);printBlanks();
+  setCursor(0, 6); ucg.print("Tune Rate ");ucg.print(stepsize_label[stepsize]);printBlanks();
 }
 
 void printRITFreq(int16_t freq) {
-  setCursor(9, 6); ucg.print(freq); printBlanks();
+  setCursor(9, 7); ucg.print(freq); printBlanks();
 }
 
 void printRIT(int rit, int16_t freq) {
-  setCursor(0, 6); ucg.print("RIT ");ucg.print(offon_label[rit]); ucg.print("  ");
+  setCursor(0, 7); ucg.print("RIT ");ucg.print(offon_label[rit]); ucg.print("  ");
   printRITFreq(freq);
 }
 
 void printTXstate(bool tx) {
-  setCursor(8, 7);
+  setCursor(8, 8);
   if (tx) {
     ucg.setColor(255,0,0); ucg.print("--TX--"); ucg.setColor(255,255,255);
   } else {
@@ -500,7 +505,7 @@ void setEEPROMautoSave() {
 }
 
 void updateAllFreq() {
-  updateAllFrquencyOutputs(vfomode[vfosel], vfo[vfosel], ifFreq[vfomode[vfosel]], BFOFreq[vfomode[vfosel]], rit ? ritFreq : 0, transmitting, xtalfreq);
+  updateAllFrquencyOutputs(mode, vfo[vfosel], ifFreq[mode], BFOFreq[mode], rit ? ritFreq : 0, transmitting, xtalfreq);
 }
 
 void triggerVFOChange() {
@@ -514,7 +519,7 @@ void triggerRITChange(int menu) {
 }
 
 void triggerBandChange(int menu) {
-  vfomode[vfosel] = bandMode[bandval];
+  mode = bandMode[bandval];
   vfo[vfosel] = bandFreq[bandval];
   triggerValueChange(0);
   setEEPROMautoSave();
@@ -644,7 +649,7 @@ int8_t paramAction(uint8_t action, uint8_t id = ALL) { // list of parameters
   switch(id){    
     case ALL:     for(id = 1; id != N_ALL_PARAMS+1; id++) paramAction(action, id);  // for all parameters
     // Visible parameters
-    case MODE:    paramAction(action, vfomode[vfosel],0x11,      "Mode",     mode_label,        0,     _N(mode_label)-1, triggerValueChange); break;
+    case MODE:    paramAction(action, mode,           0x11,      "Mode",     mode_label,        0,     _N(mode_label)-1, triggerValueChange); break;
     case FILTER:  paramAction(action, filt,           0x12, "NR Filter",     filt_label,        0,     _N(filt_label)-1, triggerValueChange); break;
     case BAND:    paramAction(action, bandval,        0x13,      "Band",     band_label,        0,     _N(band_label)-1, triggerBandChange ); break;
     case STEP:    paramAction(action, stepsize,       0x14, "Tune Rate", stepsize_label,        0, _N(stepsize_label)-1, triggerValueChange); break;
@@ -664,8 +669,6 @@ int8_t paramAction(uint8_t action, uint8_t id = ALL) { // list of parameters
     // invisible parameters. These are here only for eeprom save/restore
     case FREQA:   paramAction(action, vfo[VFOA],         0,        NULL,           NULL,         0,                    0, triggerNoop       ); break;
     case FREQB:   paramAction(action, vfo[VFOB],         0,        NULL,           NULL,         0,                    0, triggerNoop       ); break;
-    case MODEA:   paramAction(action, vfomode[VFOA],     0,        NULL,           NULL,         0,                    0, triggerNoop       ); break;
-    case MODEB:   paramAction(action, vfomode[VFOB],     0,        NULL,           NULL,         0,                    0, triggerNoop       ); break;
     case VERS:    paramAction(action, eeprom_version,    0,        NULL,           NULL,         0,                    0, triggerNoop       ); break;
     
     // case NULL_:   menumode = NO_MENU; show_banner(); break;
@@ -713,6 +716,7 @@ void triggerValueChange(int menu) {
   }
   // give all values to the output routine
   updateAllFreq();
+  printMode(mode);
   printPrimaryVFO(vfosel);
   printSecondaryVFO(vfosel^1);
   printStep(stepsize);
@@ -904,7 +908,7 @@ void loop() {
     Serial.print("Time for 20 chars: "); Serial.println(dt);
     
     Serial.print("menumode: "); Serial.println(menumode);
-    Serial.print("mode: "); Serial.println(vfomode[vfosel]);
+    Serial.print("mode: "); Serial.println(mode);
     Serial.print("filt: "); Serial.println(filt);
     Serial.print("stepsize: "); Serial.println(stepsize);
     Serial.print("vfosel: "); Serial.println(vfosel);
@@ -912,8 +916,6 @@ void loop() {
     Serial.print("ritFreq: "); Serial.println(ritFreq);
     Serial.print("vfo[VFOA]: "); Serial.println(vfo[VFOA]);
     Serial.print("vfo[VFOB]: "); Serial.println(vfo[VFOB]);
-    Serial.print("vfomode[VFOA]: "); Serial.println(vfomode[VFOA]);
-    Serial.print("vfomode[VFOB]: "); Serial.println(vfomode[VFOB]);
     Serial.println(); Serial.println();
     
     
