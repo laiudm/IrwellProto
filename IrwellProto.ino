@@ -166,7 +166,7 @@ void debugPrintf(const char * format, ...) {
 #define traceEEPROM(format, ...)
 
 #define traceError(format, ...) debugPrintf(format, __VA_ARGS__)
-//#define traceI2C(format, ...) debugPrintf(format, __VA_ARGS__)
+#define traceI2C(format, ...) debugPrintf(format, __VA_ARGS__)
 //#define traceEEPROM(format, ...) debugPrintf(format, __VA_ARGS__)
 #define traceDisplay(format, ...) debugPrintf(format, __VA_ARGS__)
 
@@ -485,7 +485,8 @@ void updateAllFrquencyOutputs(uint8_t mode, int32_t freq, int32_t finalIF, int32
   uint32_t vfofreq = freq + finalIF + freqRIT;
   setFrequency(VFO_PORT, VFO_CHL, vfofreq, xtalFreq);
   switch(mode) {
-    case MODE_USB: MODE_LSB:
+    case MODE_USB: 
+    case MODE_LSB:
       setFrequency(BFO_PORT, BFO_CHL, bfoFreq, xtalFreq);
       break;
     case MODE_CW:
