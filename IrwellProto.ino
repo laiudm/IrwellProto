@@ -146,6 +146,30 @@ enum params_t {NULL_, MODE, FILTER, BAND, STEP, VFOSEL, RIT, RITFREQ, SIFXTAL, I
 #define N_PARAMS 16                 // number of (visible) parameters
 #define N_ALL_PARAMS (N_PARAMS+3)  // total of all parameters
 
+//---------- Serial Debug Output -----------------------
+
+void debugPrintf(const char * format, ...) {
+  char buff[100];
+  va_list va;
+  va_start(va, format);
+  vsnprintf(buff, sizeof buff, format, va);
+  va_end(va);
+  Serial.println(buff);
+}
+
+// Work in Progress - ignore for the moment
+//#define TRACEI2CdebugPrintf(format, ...) debugPrintf(format, __VAR_ARGS__)
+//#define trace(type, format, ...) type##debugPrintf(format, __VA_ARGS__)
+
+#define traceError(format, ...)
+#define traceI2C(format, ...)
+#define traceEEPROM(format, ...)
+
+#define traceError(format, ...) debugPrintf(format, __VA_ARGS__)
+//#define traceI2C(format, ...) debugPrintf(format, __VA_ARGS__)
+//#define traceEEPROM(format, ...) debugPrintf(format, __VA_ARGS__)
+#define traceDisplay(format, ...) debugPrintf(format, __VA_ARGS__)
+
 //---------- Rotary Encoder Processing -----------------------
 
 volatile int8_t encoder_val = 0;
@@ -207,6 +231,7 @@ void resetEncoder(int id) {
 
 //--------- PCF8574 Interfacing ----------------------------------
 
+
 void write_PCF8574(uint8_t address, uint8_t data) {
 #ifndef MOCKI2C
   Wire.begin();
@@ -214,9 +239,8 @@ void write_PCF8574(uint8_t address, uint8_t data) {
   Wire.write(0b00000000);
   Wire.endTransmission();
 #endif
-#ifdef TRACEI2C
-  Serial.print("write_PCF8574 to "); Serial.print(address); Serial.print(": "); Serial.println(data);
-#endif
+
+  traceI2C("write_PCF8574 to 0x%.2x: 0x%.2x", address, data);
 }
 
 void init_PCF8574() {
@@ -278,14 +302,10 @@ void _setFrequency(uint8_t port, uint8_t channel, uint32_t frequency, uint32_t x
   tcaselect(port);
   si5351aSetFrequency(channel, frequency, xtalfreq);
 #endif
-#ifdef TRACEI2C
-  Serial.print("Si5351 port: "); Serial.print(port); Serial.print(", chl: "); Serial.print(channel); Serial.print(", freq: "); Serial.print(frequency);
-  Serial.print(", xtalFreq: "); Serial.println(xtalfreq);
-#endif
+  traceI2C("SI5351 port: %i, chl: %i, freq: %i, xtalFreq: %i", port, channel, frequency, xtalfreq);
 }
 
 void setFrequency(uint8_t port, uint8_t channel, uint32_t frequency, uint32_t xtalFreq) {
-  Serial.print("setFrquency port: "); Serial.print(port); Serial.print(", chl: "); Serial.print(channel); Serial.print(", freq: "); Serial.println(frequency);
   if (xtalFreq != currentXtalFreq) {
     // invalidate the "cache"
     currentFrequency[0] = - 1; currentFrequency[1] = - 1; currentFrequency[2] = - 1;;
@@ -305,9 +325,7 @@ void disableFrequency(uint8_t port, uint8_t channel) {
   tcaselect(port);
   si5351aOutputOff(channel);
 #endif
-#ifdef TRACEI2C
-  Serial.print("Si5351 disable port: "); Serial.print(port); Serial.print(", chl: "); Serial.println(channel);
-#endif
+  traceI2C("Si5351 disable port: %i, chl: %i", port, channel);
 }
 
 
@@ -319,41 +337,27 @@ int eeprom_addr;
 void eeprom_init() {
   uint16_t status = EEPROM.init();  // I think default parameters are fine
   if (status != EEPROM_OK)
-    Serial.print("Eeprom init error: "); Serial.println(status);  
-}
-
-// temporary functions to test eeprom - remove when eeprom has been tested a bit more
-void EEPROM_read(uint16 Address, uint16 *Data){
-  Serial.print("EEPROM_read: from "); Serial.print((int) Address); Serial.print(", To: "); Serial.println((int)Data);
-  if (Address==23)
-    *Data = 1234; // test
-  else
-    *Data = 0x4321; // for 32 bits = 1126253345
-}
-
-void EEPROM_write(uint16 Address, uint16 Data) {
-  Serial.print("EEPROM_write: to "); Serial.print((int) Address); Serial.print(", Data: "); Serial.println(Data);
+    traceError("Eeprom init error: %i", status);
 }
 
 // The menu system reads & writes in units of 16 bits
 
 void eeprom_read_block (void *__dst, const void *__src, size_t __n) {
-  //Serial.print("eeprom_read_block: from addr "); Serial.print((int) __src); Serial.print(", length: "); Serial.println(__n);
   for (int i=0; i<__n; i++) {
     uint16_t status = EEPROM.read( ((int)__src)+i,  (uint16_t *)__dst+i );
     if (status != EEPROM_OK) {
-      Serial.print("Eeprom read error: "); Serial.print(status); Serial.print(" Read from ");Serial.println(*(int *)__src);
+      traceError("Eeprom read error: %i. Read from %i", status, *(int *)__src); 
     }
   }
-  Serial.print("eeprom_read_block: from addr "); Serial.print((int) __src); Serial.print(", length: "); Serial.print(__n); Serial.print(" value: "); Serial.println(*(uint16_t *)__dst); 
-};
+  traceEEPROM("eeprom_read_block: from addr %i, length %i, value: %i", (int) __src, (int) __src, *(uint16_t *)__dst);
+  };
 
 void eeprom_write_block(const void *__src, void *__dst, size_t __n) {
-  Serial.print("eeprom_write_block: to addr "); Serial.print((int) __dst); Serial.print(", length: "); Serial.print(__n); Serial.print(" value: "); Serial.println( *(uint16_t *)__src); 
+  traceEEPROM("eeprom_write_block: to addr %i, length: %i, value: %i", (int) __dst, __n, *(uint16_t *)__src);
   for (int i=0; i<__n; i++) {
     uint16_t status = EEPROM.write( ((int)__dst)+i, *((uint16_t *)__src+i) ); // only update "eeprom" if the value has changed.
     if (status != EEPROM_OK) {
-      Serial.print("Eeprom write error: "); Serial.print(status); Serial.print(" Write to ");Serial.println((int) __dst);
+      traceError("Eeprom write error: %i. Write to %i", status, (int) __dst);
     }
   }
 };
@@ -562,7 +566,7 @@ void bandDown() {
 
 void show_banner(){
   setCursor(0, 0);
-  ucg.print("Irwell TXCVR V0.1");
+  ucg.print("G6LBQ HF Transceiver");
   printBlanks(); printBlanks();
   setCursor(0, 1);
   printBlanks(); printBlanks();
@@ -771,45 +775,26 @@ void setup() {
   // 1. stored values are from a different version
   // 2. SW_STEP pressed during power-up
 
-  Serial.print("Input SW_STEP value before delay is: "); Serial.println(digitalRead(SW_STEP)); 
+  traceEEPROM("Input SW_STEP value before delay is: %i", SW_STEP); 
   delay(200); // ensure input buttons are valid by giving any external Capacitances plenty of time to charge
-  Serial.print("Input SW_STEP value after delay is: "); Serial.println(digitalRead(SW_STEP)); 
-  Serial.println("checking version");
+  traceEEPROM("Input SW_STEP value after delay is: %i",digitalRead(SW_STEP)); 
+  traceEEPROM("checking version", 0);
   paramAction(LOAD, VERS);
-  Serial.print("On initial load eeprom_version: "); Serial.println(eeprom_version);
+  traceEEPROM("On initial load eeprom_version: %i", eeprom_version);
   if((eeprom_version != get_version_id()) || !digitalRead(SW_STEP)){
   //if( (eeprom_version != get_version_id()) ){
     if (!digitalRead(SW_STEP)) {
-      Serial.println("forced eeprom reload");
+      traceEEPROM("forced eeprom reload", 0);
     }
-    Serial.print("Reload - eeprom_version: "); Serial.println(eeprom_version);
+    traceEEPROM("Reload - eeprom_version: %i", eeprom_version);
     eeprom_version = get_version_id();
     paramAction(SAVE);  // save default parameter values
     setCursor(0, 1); ucg.print("Reset settings..");
     delay(1000);
   }
   paramAction(LOAD);  // load all parameters
-  Serial.print("After Load-all eeprom_version: "); Serial.println(eeprom_version);
-  
-  /*
-  Serial.print("eeprom_version before: "); Serial.println(eeprom_version);
-  paramAction(LOAD, VERS);
-  Serial.print("eeprom_version after read: "); Serial.println(eeprom_version);
-  eeprom_version = 1234;
-  paramAction(SAVE, VERS);
-  paramAction(LOAD, VERS);
-  Serial.print("eeprom_version after writing 1234: "); Serial.println(eeprom_version);
-  
-  
-  Serial.print("xtalfreq before: "); Serial.println(xtalfreq);
-  paramAction(LOAD, SIFXTAL);
-  Serial.print("xtalfreq after read: "); Serial.println(xtalfreq);
-  xtalfreq = 0x12345678;
-  paramAction(SAVE, SIFXTAL);
-  paramAction(LOAD, SIFXTAL);
-  Serial.print("xtalfreq after writing 0x12345678: "); Serial.println(xtalfreq);
-  */
-  
+  traceEEPROM("After Load-all eeprom_version: %i", eeprom_version);
+
   show_banner();
   triggerValueChange(0);
 }
@@ -917,8 +902,6 @@ void loop() {
     Serial.print("vfo[VFOA]: "); Serial.println(vfo[VFOA]);
     Serial.print("vfo[VFOB]: "); Serial.println(vfo[VFOB]);
     Serial.println(); Serial.println();
-    
-    
   }
 }
   
