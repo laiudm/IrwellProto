@@ -574,7 +574,7 @@ void show_banner(){
 }
 
 void printmenuid(uint8_t menuid){ // output menuid in x.y format
-  Serial.print("printmenuid "); Serial.println(menuid);
+  //Serial.print("printmenuid "); Serial.println(menuid);
   static const char separator[] = {'.', ' '};
   uint8_t ids[] = {(uint8_t)(menuid >> 4), (uint8_t)(menuid & 0xF)};
   for(int i = 0; i < 2; i++){
@@ -811,7 +811,7 @@ void loop() {
 #ifdef DEBUG
   if ( interruptCount != lastInterruptCount ) {
     if (millis() > interruptsTimeExpired) { 
-      Serial.print("Interrupts: "); Serial.println(interruptCount);
+      //Serial.print("Interrupts: "); Serial.println(interruptCount);
       lastInterruptCount = interruptCount;
       interruptsTimeExpired = millis() + 1000;  // update max of one a second
       //delay(1000);
@@ -853,6 +853,8 @@ void loop() {
     if (readEncoder(6)) {
       // update the frequency that's tuned
       vfo[vfosel] += readEncoder(7)*fstepRates[stepsize];
+      if (vfo[vfosel] < 500000) vfo[vfosel] = 500000;
+      if (vfo[vfosel] > 30000000) vfo[vfosel] = 30000000;
       triggerVFOChange();
       resetEncoder(8);
       setEEPROMautoSave();
