@@ -745,23 +745,23 @@ void setup() {
   ucg.setRotate270();
   ucg.setColor(1, 0, 0, 0);       // set background color
   ucg.setColor(255,255,255);
-  //ucg.setFont(ucg_font_inb16_mr);   // arbitrary font for the moment; must be fixed-size
+  ucg.setFont(ucg_font_inb16_mr);   // arbitrary font for the moment; must be fixed-size
 
   // choices of font from fontgroupx11 collection - see https://github.com/olikraus/ucglib/wiki/fontgroupx11
   //ucg.setFont(ucg_font_6x13_mr);    // Tiny, very squished up. Don't use
   //ucg.setFont(ucg_font_7x13_mr);    // Tiny, better proportions. 
   //ucg.setFont(ucg_font_9x18_mr);      // slightly better size, 
   //ucg.setFont(ucg_font_9x18B_mr);   // "B" signifies bold. Although bold, a bit less easy on the eye
-  ucg.setFont(ucg_font_10x20_mr);     // the largest in this font family
+  //ucg.setFont(ucg_font_10x20_mr);     // the largest in this font family
 
   // fonts from inconsolata family - see https://github.com/olikraus/ucglib/wiki/fontgroupinconsolata
   // this seems to be ideal - nice looking and a good range of sizes from small to large
-  ucg.setFont(ucg_font_inb38_mr);     // this is huge! The freq display would only just fit
-  ucg.setFont(ucg_font_inb33_mr);     // not much smaller
-  ucg.setFont(ucg_font_inr33_mr);     // Still large but characters are lighter weight
+  //ucg.setFont(ucg_font_inb38_mr);     // this is huge! The freq display would only just fit
+  //ucg.setFont(ucg_font_inb33_mr);     // not much smaller
+  //ucg.setFont(ucg_font_inr33_mr);     // Still large but characters are lighter weight
 
-  ucg.setFont(ucg_font_inb24_mr);     // Much more manageable size. I like this
-  ucg.setFont(ucg_font_inr24_mr);     // Lighter fonts, with same size
+  //ucg.setFont(ucg_font_inb24_mr);     // Much more manageable size. I like this
+  //ucg.setFont(ucg_font_inr24_mr);     // Lighter fonts, with same size
 
   
 
