@@ -375,59 +375,86 @@ const char* band_label[]       = { "160m",      "80m",    "60m",   "40m",    "30
 const uint8_t bandMode[]  =      { MODE_LSB, MODE_LSB,  MODE_CW, MODE_USB, MODE_USB, MODE_USB,  MODE_AM,  MODE_FM, MODE_USB, MODE_USB, MODE_USB };
 const uint32_t bandFreq[] =      {  3500000,  7000000, 10100000, 14000000, 21000000, 28000000, 30000000, 31000000, 32000000, 33000000, 34000000 };
 
-const char* stepsize_label[]   = { "1Hz", "10Hz", "100Hz", "1KHz", "10KHz", "100KHz", "1MHz" };
+const char* stepsize_label[]   = { "1Hz   ", "10Hz  ", "100Hz ", "1KHz  ", "10KHz ", "100KHz", "1MHz  " };
 const char* vfosel_label[]     = { "VFO A", "VFO B"/*, "Split"*/ };
 const char* offon_label[]      = {"OFF", "ON"};
 
 
 //------------- display subsystem  --------------------------------
 
+// Ideally only use these fonts which I've tested. Font must be monospace
+#define fontTiny   ucg_font_9x15_mr
+#define fontMedium ucg_font_inb16_mr
+#define fontLarge  ucg_font_inb24_mr
+#define fontHuge   ucg_font_inb33_mn    // just numbers to save flash
+
+void paintBackground() {
+  // paint any borders, colour fills, unchanging text to make it attractive
+
+  // paint a border around the main frequency display
+  ucg.setColor(255,255,255);
+  ucg.drawRFrame(1,1,314,55,5);
+  ucg.drawRFrame(2,2,312,53,5);
+
+  // paint a border around the secondary frequency display
+  ucg.setColor(255,255,255);
+  ucg.drawRFrame(1,60,314,40,5);
+  ucg.drawRFrame(2,61,312,38,5);
+
+  // paint a border around the Step size
+  ucg.drawRFrame(210, 102, 102, 26, 5);
+
+  // paint a border around the RIT offset
+  ucg.drawRFrame(210, 130, 102, 26, 5);
+  
+  // paint id along the bottom
+  ucg.setFont(fontTiny);
+  ucg.setPrintPos(30,230);
+  ucg.setColor(235,0,200);
+  ucg.print( "G6LBQ Irwell HF Transceiver");
+}
+
+void updateScreen() {
+  char buff[20];
+  // printPrimaryVFO
+  sprintf(buff, "%2i.%06i", vfo[vfosel] / 1000000, vfo[vfosel] % 1000000);
+  ucg.setPrintPos( 12, 44); ucg.setFont(fontHuge);  ucg.setColor(0, 255, 255); ucg.print(buff);
+  ucg.setPrintPos(264, 40); ucg.setFont(fontLarge); ucg.setColor(255, 0, 0);   ucg.print(vfosel ? "B" : "A");
+    
+  // printSecondaryVFO
+  sprintf(buff, "%2i.%06i", vfo[vfosel^1] / 1000000, vfo[vfosel^1] % 1000000);
+  ucg.setPrintPos(  26,  91); ucg.setFont(ucg_font_inb24_mr); ucg.setColor(0, 255, 255); ucg.print(buff);
+  ucg.setPrintPos( 264,  91); ucg.setFont(ucg_font_inb24_mr); ucg.setColor(255, 0, 0);   ucg.print(vfosel^1 ? "B" : "A");
+    
+  // printMode
+  ucg.setFont(fontMedium);
+  ucg.setPrintPos(  0, 122); ucg.setColor(0, 255, 0, 0); ucg.setColor(1, 255, 255, 255); ucg.print("Mode"); 
+  ucg.setPrintPos( 65, 122); ucg.setColor(1, 0, 0, 0);   ucg.setColor(0, 255, 255);      ucg.print(mode_label[mode]); 
+    
+  // printStep
+  ucg.setPrintPos( 130, 122); ucg.setFont(fontMedium); ucg.setColor(255, 0, 0); ucg.print("Step");
+  ucg.setPrintPos( 216, 122); ucg.setColor(255, 255, 255); ucg.print(stepsize_label[stepsize]);
+    
+  // printRIT
+  ucg.setPrintPos( 130, 150); ucg.setFont(fontMedium); ucg.setColor(255, 0, 0); ucg.print("RIT"); ucg.print(rit?"+":"-");
+  //ucg.setPrintPos( 144, 176); ucg.print(offon_label[rit]); ucg.print("  ");
+  sprintf(buff,"%-+5i", ritFreq);
+  ucg.setPrintPos( 216, 150); ucg.setColor(255, 255, 255); ucg.print(buff);
+}
+
 void printBlanks(){
-  //Serial.println(" printBlanks");
   ucg.print("        ");
 }
-void setCursor(int x, int y) {
-  //Serial.print(" setCursor("); Serial.print(x); Serial.print(", "); Serial.print(y);Serial.println(")");
-  ucg.setPrintPos(x*12, y*22+22);
-}
 
-void printMode(int mode) {
-  setCursor(0 ,3); ucg.print("Mode: "); ucg.print(mode_label[mode]); 
-}
-
-void printVFO(int sel) {
-  ucg.print(vfosel_label[sel]); ucg.print(" "); ucg.print(vfo[sel]);printBlanks();
-}
-
-void printPrimaryVFO(int sel) {
-  setCursor(0, 4); printVFO(sel);
-}
-
-void printSecondaryVFO(int sel) {
-  setCursor(0, 5); printVFO(sel);
-}
-
-void printStep(int stepsize) {
-  setCursor(0, 6); ucg.print("Tune Rate ");ucg.print(stepsize_label[stepsize]);printBlanks();
-}
-
-void printRITFreq(int16_t freq) {
-  setCursor(9, 7); ucg.print(freq); printBlanks();
-}
-
-void printRIT(int rit, int16_t freq) {
-  setCursor(0, 7); ucg.print("RIT ");ucg.print(offon_label[rit]); ucg.print("  ");
-  printRITFreq(freq);
-}
-
-void printTXstate(bool tx) {
-  setCursor(8, 8);
+void printTXstate(bool tx) {  // TODO - may need to rework this
+  ucg.setPrintPos( 96, 198);
   if (tx) {
     ucg.setColor(255,0,0); ucg.print("--TX--"); ucg.setColor(255,255,255);
   } else {
     ucg.print("      ");
   }
 }
+
 //--------------- Business Logic---------------------------------------------
 
 #define firstIF 45000000L       // Added by G6LBQ 01/07/2022
@@ -518,12 +545,7 @@ void updateAllFreq() {
 
 void triggerVFOChange() {
   updateAllFreq();
-  printPrimaryVFO(vfosel);
-}
-
-void triggerRITChange(int menu) {
-  updateAllFreq();
-  printRITFreq(ritFreq);
+  updateScreen();
 }
 
 void triggerBandChange(int menu) {
@@ -533,7 +555,11 @@ void triggerBandChange(int menu) {
   setEEPROMautoSave();
 }
 
-
+// Anything could have changed so calculate _everything_
+void triggerValueChange(int menu) {
+  updateAllFreq();
+  updateScreen();
+}
 
 void triggerNoop(int menu) {}
 
@@ -543,14 +569,14 @@ void triggerNoop(int menu) {}
 
 void setstepUp(){
   stepsize = (stepsize + 1) % fstepRatesSize;
-  printStep(stepsize);
+  updateScreen();
   setEEPROMautoSave();
 }
 
 void setstepDown() {
   if (stepsize==0) stepsize = fstepRatesSize;
   stepsize--;
-  printStep(stepsize);
+  updateScreen();
   setEEPROMautoSave();
 }
 
@@ -568,11 +594,11 @@ void bandDown() {
 // menu system code
 
 
-void show_banner(){
-  setCursor(0, 0);
-  ucg.print("G6LBQ HF Transceiver");
+void clearMenuArea(){
+  ucg.setFont(fontMedium); ucg.setColor(0, 255, 255, 255);
+  ucg.setPrintPos( 0, 176);
   printBlanks(); printBlanks();
-  setCursor(0, 1);
+  ucg.setPrintPos( 0, 198);
   printBlanks(); printBlanks();
 }
 
@@ -592,14 +618,15 @@ void printmenuid(uint8_t menuid){ // output menuid in x.y format
 }
 
 void printlabel(uint8_t action, uint8_t menuid, const char* label){
+  ucg.setFont(fontMedium); ucg.setColor(0, 255, 255, 255);
   if(action == UPDATE_MENU){
-    setCursor(0, 0);
+    ucg.setPrintPos( 0, 176);
     printmenuid(menuid);
     ucg.print(label); printBlanks(); printBlanks();
-    setCursor(0, 1); // value on next line
+    ucg.setPrintPos( 0, 198);// value on next line
     if(menumode >= MENU_VALUE) ucg.print('>');
   } else { // UPDATE (not in menu)
-    setCursor(0, 1); ucg.print(label); ucg.print(": ");
+    ucg.setPrintPos( 0, 198); ucg.print(label); ucg.print(": ");
   }
 }
 
@@ -663,7 +690,7 @@ int8_t paramAction(uint8_t action, uint8_t id = ALL) { // list of parameters
     case STEP:    paramAction(action, stepsize,       0x14, "Tune Rate", stepsize_label,        0, _N(stepsize_label)-1, triggerValueChange); break;
     case VFOSEL:  paramAction(action, vfosel,         0x15,  "VFO Mode",   vfosel_label,        0,   _N(vfosel_label)-1, triggerValueChange); break;
     case RIT:     paramAction(action, rit,            0x16,       "RIT",    offon_label,        0,                    1, triggerValueChange); break;
-    case RITFREQ: paramAction(action, ritFreq,        0x17,"RIT Offset",           NULL,    -1000,                 1000, triggerRITChange  ); break;
+    case RITFREQ: paramAction(action, ritFreq,        0x17,"RIT Offset",           NULL,    -1000,                 1000, triggerValueChange); break;
     case SIFXTAL: paramAction(action, xtalfreq,       0x81,  "Ref freq",           NULL, 14000000,             28000000, triggerValueChange); break;
     case IF_LSB:  paramAction(action, ifFreq[0],      0x82,    "IF-LSB",           NULL, 14000000,             28000000, triggerValueChange); break;
     case IF_USB:  paramAction(action, ifFreq[1],      0x83,    "IF-USB",           NULL, 14000000,             28000000, triggerValueChange); break;
@@ -679,7 +706,7 @@ int8_t paramAction(uint8_t action, uint8_t id = ALL) { // list of parameters
     case FREQB:   paramAction(action, vfo[VFOB],         0,        NULL,           NULL,         0,                    0, triggerNoop       ); break;
     case VERS:    paramAction(action, eeprom_version,    0,        NULL,           NULL,         0,                    0, triggerNoop       ); break;
     
-    // case NULL_:   menumode = NO_MENU; show_banner(); break;
+    // case NULL_:   menumode = NO_MENU; clearMenuArea(); break;
     default:      if((action == NEXT_MENU) && (id != N_PARAMS)) 
                       id = paramAction(action, max(1 /*0*/, min(N_PARAMS, id + ((readEncoder(3) > 0) ? 1 : -1))) ); break;  // keep iterating util menu item found
   }
@@ -689,13 +716,13 @@ int8_t paramAction(uint8_t action, uint8_t id = ALL) { // list of parameters
 void processMenuKey() {
   Serial.println("processmenukey");
     if     (menumode == 0){ menumode = 1; paramAction(UPDATE_MENU, menu);}  // enter menu mode
-    else if(menumode == 1){ menumode = 2; paramAction(UPDATE_MENU, menu);}                          // enter value selection screen
-    else if(menumode >= 2){ Serial.println("test menu"); paramAction(SAVE, menu); menumode = 0; show_banner();}  // save value, and return to default screen
+    else if(menumode == 1){ menumode = 2; paramAction(UPDATE_MENU, menu);}            // enter value selection screen
+    else if(menumode >= 2){ paramAction(SAVE, menu); menumode = 0; clearMenuArea();}  // save value, and return to default screen
 }
 
 void processEnterKey() {
-  if     (menumode == 1){ menumode = 0; show_banner();}  
-  else if(menumode >= 2){ Serial.println("test enter"); menumode = 1; paramAction(UPDATE_MENU, menu); paramAction(SAVE, menu); } // save value, and return to menu mode
+  if     (menumode == 1){ menumode = 0; clearMenuArea();}  
+  else if(menumode >= 2){ menumode = 1; paramAction(UPDATE_MENU, menu); paramAction(SAVE, menu); } // save value, and return to menu mode
 
 }
 
@@ -703,8 +730,7 @@ void processMenu() {
   if (menumode) {
     int8_t encoder_change = readEncoder(4);
     if((menumode == 1) && encoder_change){
-      //Serial.println("menu - got encoder val "); Serial.println(encoder_change);
-      menu += readEncoder(5);   // Navigate through menu
+       menu += readEncoder(5);   // Navigate through menu
       menu = max(1 , min(menu, N_PARAMS));
       menu = paramAction(NEXT_MENU, menu);  // auto probe next menu item (gaps may exist)
       resetEncoder(5);
@@ -712,24 +738,8 @@ void processMenu() {
     if(encoder_change)
       paramAction(UPDATE_MENU, menu);  // update param with encoder change and display.
   }
-  
 }
 
-// Anything could have changed so calculate _everything_
-void triggerValueChange(int menu) {
-  if (menu == 0x11) {
-    Serial.println("hack triggered");
-    // need to save the VFO's mode too. This is temporary, so just save all for simplicity
-    paramAction((int)SAVE);
-  }
-  // give all values to the output routine
-  updateAllFreq();
-  printMode(mode);
-  printPrimaryVFO(vfosel);
-  printSecondaryVFO(vfosel^1);
-  printStep(stepsize);
-  printRIT(rit, ritFreq);
-}
 
 //------------------  Initialization -------------------------
  
@@ -747,29 +757,8 @@ void setup() {
   ucg.clearScreen();
   ucg.setRotate270();
   ucg.setColor(1, 0, 0, 0);       // set background color
-  ucg.setColor(255,255,255);
-  ucg.setFont(ucg_font_inb16_mr);   // arbitrary font for the moment; must be fixed-size
-
-  // choices of font from fontgroupx11 collection - see https://github.com/olikraus/ucglib/wiki/fontgroupx11
-  //ucg.setFont(ucg_font_6x13_mr);    // Tiny, very squished up. Don't use
-  //ucg.setFont(ucg_font_7x13_mr);    // Tiny, better proportions. 
-  //ucg.setFont(ucg_font_9x18_mr);      // slightly better size, 
-  //ucg.setFont(ucg_font_9x18B_mr);   // "B" signifies bold. Although bold, a bit less easy on the eye
-  //ucg.setFont(ucg_font_10x20_mr);     // the largest in this font family
-
-  // fonts from inconsolata family - see https://github.com/olikraus/ucglib/wiki/fontgroupinconsolata
-  // this seems to be ideal - nice looking and a good range of sizes from small to large
-  //ucg.setFont(ucg_font_inb38_mr);     // this is huge! The freq display would only just fit
-  //ucg.setFont(ucg_font_inb33_mr);     // not much smaller
-  //ucg.setFont(ucg_font_inr33_mr);     // Still large but characters are lighter weight
-
-  //ucg.setFont(ucg_font_inb24_mr);     // Much more manageable size. I like this
-  //ucg.setFont(ucg_font_inr24_mr);     // Lighter fonts, with same size
-
-  
-
-   
-  
+  paintBackground();
+ 
   b.add(SW_BAND, EVT_PA0_BTNUP, EVT_PA0_LONGPRESS);
   b.add(SW_STEP, EVT_PA1_BTNUP, EVT_PA1_LONGPRESS);
   b.add(SW_MODE, EVT_PC14_BTNUP, EVT_PC14_LONGPRESS);
@@ -785,13 +774,6 @@ void setup() {
   pinMode(debugTriggered, OUTPUT);
 
   init_PCF8574();
-/* test display, font sizes
-  setCursor(0, 0); ucg.print("Line 0");
-  setCursor(1, 1); ucg.print("offset x");
-  setCursor(2, 2); ucg.print("Line 2, offset 2");
-  setCursor(0, 3); ucg.print("Line 3");
-  setCursor(0, 4);ucg.print(42);
-*/
 
   eeprom_init();
   // Load parameters from EEPROM, reset to factory defaults when 
@@ -812,13 +794,12 @@ void setup() {
     traceEEPROM("Reload - eeprom_version: %i", eeprom_version);
     eeprom_version = get_version_id();
     paramAction(SAVE);  // save default parameter values
-    setCursor(0, 1); ucg.print("Reset settings..");
+    ucg.setPrintPos( 0, 44); ucg.print("Reset settings..");
     delay(1000);
   }
   paramAction(LOAD);  // load all parameters
   traceEEPROM("After Load-all eeprom_version: %i", eeprom_version);
 
-  show_banner();
   triggerValueChange(0);
 }
 
@@ -910,7 +891,7 @@ void loop() {
   // debug output
   if (Serial.available()) {
     int ch = Serial.read();
-    setCursor(0, 8);
+    ucg.setPrintPos( 0, 198);
     long dt = micros();
     //displayRawText("Time this string1234", 20, 20, DISPLAY_RED, DISPLAY_DARKGREEN);
     ucg.print("Time this string1234");
