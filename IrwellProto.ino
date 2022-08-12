@@ -29,13 +29,38 @@
 //#define ENC_A     PB14                    // Rotary encoder A
 #define ENC_B     PB13                    // Rotary encoder B
 
+//---------- Serial Debug Output -----------------------
+
+void debugPrintf(const char * format, ...) {
+  char buff[100];
+  va_list va;
+  va_start(va, format);
+  vsnprintf(buff, sizeof buff, format, va);
+  va_end(va);
+  Serial.println(buff);
+}
+
+// Work in Progress - ignore for the moment
+//#define TRACEI2CdebugPrintf(format, ...) debugPrintf(format, __VAR_ARGS__)
+//#define trace(type, format, ...) type##debugPrintf(format, __VA_ARGS__)
+
+#define traceError(format, ...)
+#define traceI2C(format, ...)
+#define traceEEPROM(format, ...)
+
+#define traceError(format, ...) debugPrintf(format, __VA_ARGS__)
+#define traceI2C(format, ...) debugPrintf(format, __VA_ARGS__)
+//#define traceEEPROM(format, ...) debugPrintf(format, __VA_ARGS__)
+#define traceDisplay(format, ...) debugPrintf(format, __VA_ARGS__)
+
 //----------   TFT setting  ------------------- 
 
 #define   __CS    PB10                    // G6LBQ changed from PB10 to PB3 to free up PB10 for 2nd I2C bus    
 #define   __DC    PB0                     // D/C
 #define   __RST   PB1                     // RESET   
 
-Ucglib_ILI9341_18x240x320_HWSPI ucg(__DC, __CS, __RST);
+#include "CacheDisplay.h"
+Display ucg(__DC, __CS, __RST);
 
 //----------  Button Setting -----------------
 
@@ -146,29 +171,7 @@ enum params_t {NULL_, MODE, FILTER, BAND, STEP, VFOSEL, RIT, RITFREQ, SIFXTAL, I
 #define N_PARAMS 16                 // number of (visible) parameters
 #define N_ALL_PARAMS (N_PARAMS+3)  // total of all parameters
 
-//---------- Serial Debug Output -----------------------
 
-void debugPrintf(const char * format, ...) {
-  char buff[100];
-  va_list va;
-  va_start(va, format);
-  vsnprintf(buff, sizeof buff, format, va);
-  va_end(va);
-  Serial.println(buff);
-}
-
-// Work in Progress - ignore for the moment
-//#define TRACEI2CdebugPrintf(format, ...) debugPrintf(format, __VAR_ARGS__)
-//#define trace(type, format, ...) type##debugPrintf(format, __VA_ARGS__)
-
-#define traceError(format, ...)
-#define traceI2C(format, ...)
-#define traceEEPROM(format, ...)
-
-#define traceError(format, ...) debugPrintf(format, __VA_ARGS__)
-#define traceI2C(format, ...) debugPrintf(format, __VA_ARGS__)
-//#define traceEEPROM(format, ...) debugPrintf(format, __VA_ARGS__)
-#define traceDisplay(format, ...) debugPrintf(format, __VA_ARGS__)
 
 //---------- Rotary Encoder Processing -----------------------
 
@@ -257,8 +260,8 @@ void select_bank(int8_t bank) {
     // the correct bank is already selected; nothing to do here
     return;
   init_PCF8574();   // turn off all banks
-  int bit = bank % 6;
-  int bankOffset = bank/6;
+  int bit = bank % 5;
+  int bankOffset = bank/5;
   write_PCF8574(0x38 + bankOffset, 1<<bit);
   currentBank = bank;
 }
