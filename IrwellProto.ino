@@ -13,6 +13,15 @@
 #define TRACEI2C    // uncomment to generate debug traces on I2C outputs. BLUEPILL must be defined for Serial to work
 #define DEBUG
 
+#define OPTICAL_ENCODER
+#ifdef OPTICAL_ENCODER
+#define ROTARY_LOW_SENSITIVITY 10   // encoder sensitivity for menu operations.
+#define ROTARY_HIGH_SENSITIVITY 2   // encoder sensitivity for VFO.
+#else
+#define ROTARY_LOW_SENSITIVITY  1   // encoder sensitivity for menu operations.
+#define ROTARY_HIGH_SENSITIVITY 1   // encoder sensitivity for VFO.
+#endif
+
 //---------- Library include ----------
 #include <stdarg.h>
 #include <Wire.h>
@@ -26,7 +35,6 @@
 //----------   Encoder setting  ---------------
 
 #define ENC_A     PB12                    // Rotary encoder A
-//#define ENC_A     PB14                    // Rotary encoder A
 #define ENC_B     PB13                    // Rotary encoder B
 
 //---------- Serial Debug Output -----------------------
@@ -209,27 +217,17 @@ void Rotary_enc() {
   last_state = state;
 }
 
-int readId;
 int8_t lastReadVal;
+int lastSensitivity = 1;
 
-// detect if there are dropped counts between reading and reseting.
-int8_t readEncoder(int id) {
-  //noInterrupts();     
-  lastReadVal = encoder_val;
-  //encoder_val = 0;  // future change; not possible yet
-  //interrupts();
-  readId = id;
+int8_t readEncoder(int sensitivity) {
+  lastReadVal = encoder_val/sensitivity;
+  lastSensitivity = sensitivity;
   return lastReadVal;
 }
 
-void resetEncoder(int id) {
-  if (encoder_val != lastReadVal) {
-    //aha, these values would be missed if we weren't careful
-    Serial.print("reset Encoder. reader id: ");Serial.print(readId); Serial.print(" reseter: "); Serial.print(id); 
-    Serial.print(" encoder_val: "); Serial.print(encoder_val); Serial.print(" lastReadVal: "); Serial.println(lastReadVal);
-  }
-  encoder_val -= lastReadVal; // cheat & see if it improves things? Yes. There are lots of dropped counts otherwise
-  //encoder_val = 0;
+void resetEncoder() {
+  encoder_val -= lastReadVal*lastSensitivity;
 }
 
 //--------- Band Pass Filter Bank Selection ---------------------------------
@@ -694,15 +692,16 @@ void actionCommon(uint8_t action, uint16_t *ptr, uint8_t size){
 }
 
 template<typename T> void paramAction(uint8_t action, volatile T& value, uint8_t menuid, const char* label, const char* enumArray[], int32_t _min, int32_t _max, void (*trigger)(int m)){
-  int32_t delta = readEncoder(1);
+  
   switch(action){
     case UPDATE:
-    case UPDATE_MENU:
+    case UPDATE_MENU: {
+      int32_t delta = readEncoder(ROTARY_LOW_SENSITIVITY);
       if (sizeof(T) == sizeof(uint32_t)) delta *= fstepRates[stepsize];  // large menu items use the tune-rate
       value = (int32_t)value + delta;
       if(     value < _min) value = _min;
       else if(value > _max) value = _max;
-      resetEncoder(2);
+      resetEncoder();
 
       printlabel(action, menuid, label);  // print normal/menu label
       if(enumArray == NULL){  // print value
@@ -715,6 +714,7 @@ template<typename T> void paramAction(uint8_t action, volatile T& value, uint8_t
       if (delta)
         trigger(menuid);  // only trigger if there's a change to the value
       break;
+    }
       
     default:
       actionCommon(action, (uint16_t *)&value, sizeof(value)/2); // /2 because the eeprom lib stores in units of 16 bits
@@ -757,7 +757,7 @@ int8_t paramAction(uint8_t action, uint8_t id = ALL) { // list of parameters
     
     // case NULL_:   menumode = NO_MENU; clearMenuArea(); break;
     default:      if((action == NEXT_MENU) && (id != N_PARAMS)) 
-                      id = paramAction(action, max(1 /*0*/, min(N_PARAMS, id + ((readEncoder(3) > 0) ? 1 : -1))) ); break;  // keep iterating util menu item found
+                      id = paramAction(action, max(1 /*0*/, min(N_PARAMS, id + ((readEncoder(ROTARY_LOW_SENSITIVITY) > 0) ? 1 : -1))) ); break;  // keep iterating util menu item found
   }
   return id;  // needed?
 }
@@ -777,12 +777,12 @@ void processEnterKey() {
 
 void processMenu() {
   if (menumode) {
-    int8_t encoder_change = readEncoder(4);
+    int8_t encoder_change = readEncoder(ROTARY_LOW_SENSITIVITY);
     if((menumode == 1) && encoder_change){
-       menu += readEncoder(5);   // Navigate through menu
+       menu += readEncoder(ROTARY_LOW_SENSITIVITY);   // Navigate through menu
       menu = max(1 , min(menu, N_PARAMS));
       menu = paramAction(NEXT_MENU, menu);  // auto probe next menu item (gaps may exist)
-      resetEncoder(5);
+      resetEncoder();
     }
     if(encoder_change)
       paramAction(UPDATE_MENU, menu);  // update param with encoder change and display.
@@ -903,13 +903,13 @@ void loop() {
     processMenu();
   } else {
     // only process the encoder when not in menu mode. This is because encoder counts could occur during the slow screen painting
-    if (readEncoder(6)) {
+    if (readEncoder(ROTARY_HIGH_SENSITIVITY)) {
       // update the frequency that's tuned
-      vfo[vfosel] += readEncoder(7)*fstepRates[stepsize];
+      vfo[vfosel] += readEncoder(ROTARY_HIGH_SENSITIVITY)*fstepRates[stepsize];
       if (vfo[vfosel] < 500000) vfo[vfosel] = 500000;
       if (vfo[vfosel] > 30000000) vfo[vfosel] = 30000000;
       triggerVFOChange();
-      resetEncoder(8);
+      resetEncoder();
       setEEPROMautoSave();
     }
   }
