@@ -6,8 +6,8 @@
 // at those x, y coordinates.
 // Ignore the font - require an area to use the same font.
 
-// create a hashmap - the coordinates select the character.
-#define ENTRIES 250
+// create a hashmap - the coordinates select the entry.
+#define ENTRIES 257
 
 typedef struct entry {
   uint8_t x, y;       // coordinates of character
@@ -24,7 +24,9 @@ typedef struct hashmap {
 Hashmap hash;
 
 uint16_t hashcode(uint8_t x, uint8_t y) {
-  uint16_t result = ((x+1) * (y+1) ) % ENTRIES; // add 1 to avoid 0 on x or y axis crashing the hash
+  uint16_t result = ((x+1) * (y+1)) % ENTRIES; // add 1 to avoid 0 on x or y axis crashing the hash
+  //uint16_t result = (x*256 + y) % ENTRIES;
+  //uint16_t result = (x*211 + y*293) % ENTRIES;
   return result;
 }
 
@@ -42,7 +44,7 @@ bool matchAndSet(uint8_t x, uint8_t y, char ch) {
       current->ch = ch;
       return result;
     }
-    if (current->ch == 0) {
+    if ((current->x == 0) && (current->y == 0)) {
       // found an empty slot. So these coords haven't been found; save it here
       hash.len++;
       traceDisplay("matchAndSet: no match; adding at %i - (%i, %i)'%c'", index, x, y, ch);
@@ -54,29 +56,31 @@ bool matchAndSet(uint8_t x, uint8_t y, char ch) {
   }
 }
 
-// class to wrap the standard display & intercept the screen writes
+// Wrap the standard display & intercept the screen writes.
+// Only write to the screen if the character has changed.
+// This massively improves the screen responsiveness and massively
+// simplifies the screen writing code
 
 class Display : public Ucglib_ILI9341_18x240x320_HWSPI {
   typedef Ucglib_ILI9341_18x240x320_HWSPI super;
 
-  public:
+public:
+  ucg_fntpgm_uint8_t *lastFont = NULL;
+  ucg_int_t w = 0;
+  
   Display( uint8_t cd, uint8_t cs = UCG_PIN_VAL_NONE, uint8_t reset = UCG_PIN_VAL_NONE) :
     super(cd, cs, reset)
     { };
 
-/* only need these if we track colour too, which I hope we don't need to do
-  void setColor(uint8_t r, uint8_t g, uint8_t b) {
-    traceDisplay("Set color (%i,%i,%i)", r,g,b);
-    super::setColor(0, r, g, b);
+  void setFont(const ucg_fntpgm_uint8_t  *font) {
+    // Memoising the setFont() and getStrWidth() calls doubles! updateScreen() execution speed.
+    // These few lines of code are well worth it
+    if (font != lastFont) {
+      super::setFont(font);
+      w = getStrWidth(" ");
+      lastFont = (ucg_fntpgm_uint8_t  *)font;
+    }
   }
-
-  void setColor(uint8_t idx, uint8_t r, uint8_t g, uint8_t b) {
-    traceDisplay("Set color index: %i, (%i,%i,%i)", idx,r,g,b);
-    super::setColor(idx, r, g, b);
-  }
-*/
-// if getStrWidth(" ") call has high overhead, could intercept setFont() and  cache the result
-  
 
   size_t write(uint8_t c) {
     ucg_int_t x = get_tx();
@@ -86,8 +90,7 @@ class Display : public Ucglib_ILI9341_18x240x320_HWSPI {
     if (!matched) {
       super::write(c);
     }
-    ucg_int_t w = getStrWidth(" "); // monofont glitched, hack to fixed width. Just a pixel out
-    setPrintPos(x+w, y);
+    setPrintPos(x+w, y); // monofonts are glitched, hack to fixed width. Just a pixel out
   }
   
 };

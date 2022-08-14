@@ -47,11 +47,12 @@ void debugPrintf(const char * format, ...) {
 #define traceError(format, ...)
 #define traceI2C(format, ...)
 #define traceEEPROM(format, ...)
+#define traceDisplay(format, ...)
 
 #define traceError(format, ...) debugPrintf(format, __VA_ARGS__)
 #define traceI2C(format, ...) debugPrintf(format, __VA_ARGS__)
 //#define traceEEPROM(format, ...) debugPrintf(format, __VA_ARGS__)
-#define traceDisplay(format, ...) debugPrintf(format, __VA_ARGS__)
+//#define traceDisplay(format, ...) debugPrintf(format, __VA_ARGS__)
 
 //----------   TFT setting  ------------------- 
 
@@ -891,23 +892,45 @@ void loop() {
   // debug output
   if (Serial.available()) {
     int ch = Serial.read();
-    ucg.setPrintPos( 0, 198);
-    long dt = micros();
-    //displayRawText("Time this string1234", 20, 20, DISPLAY_RED, DISPLAY_DARKGREEN);
-    ucg.print("Time this string1234");
-    dt = micros() - dt;
-    Serial.print("Time for 20 chars: "); Serial.println(dt);
+    if (ch == 't') {
+      long dt = micros();
+      updateScreen();
+      updateScreen();
+      dt = micros() - dt;
+      Serial.print("Time for for updateScreen: "); Serial.println(dt);
+
+      dt = micros();
+      ucg.setFont(fontHuge);
+      ucg.getStrWidth(" ");
+      ucg.setFont(fontLarge);
+      ucg.getStrWidth(" ");
+      ucg.setFont(fontMedium);
+      ucg.getStrWidth(" ");
+      ucg.setFont(fontTiny);
+      ucg.getStrWidth(" ");
+      dt = micros() - dt;
+      Serial.print("Time for for setFont, getStrWidth: "); Serial.println(dt);
+      
+    } else if (ch == 'd') {
+      ucg.setPrintPos( 0, 198);
+      long dt = micros();
+      //displayRawText("Time this string1234", 20, 20, DISPLAY_RED, DISPLAY_DARKGREEN);
+      ucg.print("Time this string1234");
+      dt = micros() - dt;
+      Serial.print("Time for 20 chars: "); Serial.println(dt);
+    } else if (ch == 's') {
     
-    Serial.print("menumode: "); Serial.println(menumode);
-    Serial.print("mode: "); Serial.println(mode);
-    Serial.print("filt: "); Serial.println(filt);
-    Serial.print("stepsize: "); Serial.println(stepsize);
-    Serial.print("vfosel: "); Serial.println(vfosel);
-    Serial.print("rit: "); Serial.println(rit);
-    Serial.print("ritFreq: "); Serial.println(ritFreq);
-    Serial.print("vfo[VFOA]: "); Serial.println(vfo[VFOA]);
-    Serial.print("vfo[VFOB]: "); Serial.println(vfo[VFOB]);
-    Serial.println(); Serial.println();
+      Serial.print("menumode: "); Serial.println(menumode);
+      Serial.print("mode: "); Serial.println(mode);
+      Serial.print("filt: "); Serial.println(filt);
+      Serial.print("stepsize: "); Serial.println(stepsize);
+      Serial.print("vfosel: "); Serial.println(vfosel);
+      Serial.print("rit: "); Serial.println(rit);
+      Serial.print("ritFreq: "); Serial.println(ritFreq);
+      Serial.print("vfo[VFOA]: "); Serial.println(vfo[VFOA]);
+      Serial.print("vfo[VFOB]: "); Serial.println(vfo[VFOB]);
+      Serial.println(); Serial.println();
+    }
   }
 }
   
