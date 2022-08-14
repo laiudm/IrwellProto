@@ -232,9 +232,7 @@ void resetEncoder(int id) {
   //encoder_val = 0;
 }
 
-
-//--------- PCF8574 Interfacing ----------------------------------
-
+//--------- Band Pass Filter Bank Selection ---------------------------------
 
 void write_PCF8574(uint8_t address, uint8_t data) {
 #ifndef MOCKI2C
@@ -247,40 +245,82 @@ void write_PCF8574(uint8_t address, uint8_t data) {
   traceI2C("write_PCF8574 to 0x%.2x: 0x%.2x", address, data);
 }
 
-void init_PCF8574() {
+void init_BPF() {
   write_PCF8574(0x38, 0b00000000);  //initialize PCF8574 I/O expander 1 for BPF filters 1 to 5 
   write_PCF8574(0x39, 0b00000000);  //initialize PCF8574 I/O expander 2 for BPF filters 6 to 10
 }
 
-//--------- Filter Bank Selection ---------------------------------
-
-void select_bank(int8_t bank) {
+void select_BPFbank(int8_t port, int8_t bank) {
+  static int8_t currentPort = -1;
   static int8_t currentBank = -1;
-  // bank 0 corresponds to 0x38, port 1, bank 6 is 0x39, port 1 etc.
-  if (bank == currentBank)
+  if ((port == currentPort) && (bank == currentBank))
     // the correct bank is already selected; nothing to do here
     return;
-  init_PCF8574();   // turn off all banks
-  int bit = bank % 5;
-  int bankOffset = bank/5;
-  write_PCF8574(0x38 + bankOffset, 1<<bit);
+  init_BPF();   // turn off all banks
+  write_PCF8574(port, bank);
+  currentPort = port;
   currentBank = bank;
 }
 
 void select_BPF(uint32_t freq) {
 
   // HF Band Pass Filter logic added by G6LBQ
-  if        (freq <  1600000){ select_bank(0);
-  } else if (freq <  2000000){ select_bank(1);
-  } else if (freq <  3000000){ select_bank(2);
-  } else if (freq <  4000000){ select_bank(3);
-  } else if (freq <  6000000){ select_bank(4);
-  } else if (freq <  8000000){ select_bank(5);
-  } else if (freq < 11000000){ select_bank(6);
-  } else if (freq < 15000000){ select_bank(7);
-  } else if (freq < 22000000){ select_bank(8);
-  } else if (freq < 30000000){ select_bank(9);
+  if        (freq <  1600000){ select_BPFbank(0x38, 0b00000001);
+  } else if (freq <  2000000){ select_BPFbank(0x38, 0b00000010);
+  } else if (freq <  3000000){ select_BPFbank(0x38, 0b00000100);
+  } else if (freq <  4000000){ select_BPFbank(0x38, 0b00001000);
+  } else if (freq <  6000000){ select_BPFbank(0x38, 0b00010000);
+  } else if (freq <  8000000){ select_BPFbank(0x39, 0b00000001);
+  } else if (freq < 11000000){ select_BPFbank(0x39, 0b00000010);
+  } else if (freq < 15000000){ select_BPFbank(0x39, 0b00000100);
+  } else if (freq < 22000000){ select_BPFbank(0x39, 0b00001000);
+  } else if (freq < 30000000){ select_BPFbank(0x39, 0b00010000);
   } 
+}
+
+//--------- Low Pass Filter Bank Selection ---------------------------------
+
+#define LPF_PCF_ADDR 0x40
+#define MOCK_LPF
+
+// Duplicate of write_PCF8574, but is added to allow this I2C interface to be 
+// easily mocked out independently of the other I2C interfaces.
+// This interface is a future addition to the hardware
+
+void write_LPF_PCF8574(uint8_t address, uint8_t data) {
+#ifndef MOCK_LPF
+  Wire.begin();
+  Wire.beginTransmission(address);
+  Wire.write(data);
+  Wire.endTransmission();
+#endif
+
+  traceI2C("write_LPF_PCF8574 to 0x%.2x: 0x%.2x", address, data);
+}
+
+void init_LPF() {
+  write_LPF_PCF8574(LPF_PCF_ADDR, 0b00000000);  //initialize PCF8574 I/O expander for LPF filters 1 to 6
+}
+
+void select_LPFbank(int8_t bank) {
+  static int8_t currentBank = -1;
+  if (bank == currentBank)
+    // the correct bank is already selected; nothing to do here
+    return;
+  write_LPF_PCF8574(LPF_PCF_ADDR, bank);
+  currentBank = bank;
+}
+
+void select_LPF(uint32_t freq) {
+
+  // Low Pass Filter selection logic. G6LBQ to add appropriate freq values
+  if        (freq <  1600000){ select_LPFbank(0b00000001);
+  } else if (freq <  2000000){ select_LPFbank(0b00000010);
+  } else if (freq <  3000000){ select_LPFbank(0b00000100);
+  } else if (freq < 10000000){ select_LPFbank(0b00001000);
+  } else if (freq < 20000000){ select_LPFbank(0b00010000);
+  } else if (freq < 30000000){ select_LPFbank(0b00100000);
+  }
 }
 
 // -----     Routine to interface to the TCA9548A -----
@@ -480,6 +520,7 @@ void updateModeOutputs(uint8_t mode) {
 
 void updateAllFrquencyOutputsDualConversionOld(uint8_t mode, int32_t freq, int32_t ifshift, int32_t freqRIT, bool transmitting, int32_t xtalFreq) {
   select_BPF(freq);
+  select_LPF(freq);
   updateModeOutputs(mode);
   uint32_t vfofreq = freq + firstIF + freqRIT;
   if ((mode==MODE_CW) && transmitting)  // is in the original code. Is this correct? Isn't rx offset from the tuned freq to create the tone (or BFO adds)?
@@ -518,6 +559,7 @@ void updateAllFrquencyOutputsDualConversion(uint8_t mode, int32_t freq, int32_t 
 
 void updateAllFrquencyOutputs(uint8_t mode, int32_t freq, int32_t finalIF, int32_t bfoFreq, int32_t freqRIT, bool transmitting, int32_t xtalFreq) {
   select_BPF(freq);
+  select_LPF(freq);
   updateModeOutputs(mode);
   uint32_t vfofreq = freq + finalIF + freqRIT;
   setFrequency(VFO_PORT, VFO_CHL, vfofreq, xtalFreq);
@@ -780,7 +822,8 @@ void setup() {
   pinMode(debugOut, OUTPUT);                  // temp for debugging
   pinMode(debugTriggered, OUTPUT);
 
-  init_PCF8574();
+  init_BPF();
+  init_LPF();
 
   eeprom_init();
   // Load parameters from EEPROM, reset to factory defaults when 
