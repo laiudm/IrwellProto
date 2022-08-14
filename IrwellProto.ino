@@ -415,17 +415,23 @@ void paintBackground() {
   ucg.print( "G6LBQ Irwell HF Transceiver");
 }
 
+void printFreq(uint32_t freq) {
+  char b1[20];
+  char b2[20];
+  sprintf(b1,"%8i",freq);
+  sprintf(b2,"%.2s.%.3s.%.3s", &b1[0], &b1[2], &b1[5]);
+  ucg.print(b2);
+}
+
 void updateScreen() {
   char buff[20];
   // printPrimaryVFO
-  sprintf(buff, "%2i.%06i", vfo[vfosel] / 1000000, vfo[vfosel] % 1000000);
-  ucg.setPrintPos( 12, 44); ucg.setFont(fontHuge);  ucg.setColor(0, 255, 255); ucg.print(buff);
-  ucg.setPrintPos(264, 40); ucg.setFont(fontLarge); ucg.setColor(255, 0, 0);   ucg.print(vfosel ? "B" : "A");
+  ucg.setPrintPos( 12, 44); ucg.setFont(fontHuge);  ucg.setColor(0, 255, 255); printFreq(vfo[vfosel]);
+  ucg.setPrintPos(278, 40); ucg.setFont(fontLarge); ucg.setColor(255, 0, 0);   ucg.print(vfosel ? "B" : "A");
     
   // printSecondaryVFO
-  sprintf(buff, "%2i.%06i", vfo[vfosel^1] / 1000000, vfo[vfosel^1] % 1000000);
-  ucg.setPrintPos(  26,  91); ucg.setFont(ucg_font_inb24_mr); ucg.setColor(0, 255, 255); ucg.print(buff);
-  ucg.setPrintPos( 264,  91); ucg.setFont(ucg_font_inb24_mr); ucg.setColor(255, 0, 0);   ucg.print(vfosel^1 ? "B" : "A");
+  ucg.setPrintPos(  26,  91); ucg.setFont(ucg_font_inb24_mr); ucg.setColor(0, 255, 255); printFreq(vfo[vfosel^1]);
+  ucg.setPrintPos( 278,  91); ucg.setFont(ucg_font_inb24_mr); ucg.setColor(255, 0, 0);   ucg.print(vfosel^1 ? "B" : "A");
     
   // printMode
   ucg.setFont(fontMedium);
