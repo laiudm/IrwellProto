@@ -16,7 +16,7 @@
 #define OPTICAL_ENCODER
 #ifdef OPTICAL_ENCODER
 #define ROTARY_LOW_SENSITIVITY 10   // encoder sensitivity for menu operations.
-#define ROTARY_HIGH_SENSITIVITY 2   // encoder sensitivity for VFO.
+#define ROTARY_HIGH_SENSITIVITY 4   // encoder sensitivity for VFO.
 #else
 #define ROTARY_LOW_SENSITIVITY  1   // encoder sensitivity for menu operations.
 #define ROTARY_HIGH_SENSITIVITY 1   // encoder sensitivity for VFO.
@@ -279,7 +279,7 @@ void select_BPF(uint32_t freq) {
 
 //--------- Low Pass Filter Bank Selection ---------------------------------
 
-#define LPF_PCF_ADDR 0x40
+#define LPF_PCF_ADDR 0x3a
 #define MOCK_LPF
 
 // Duplicate of write_PCF8574, but is added to allow this I2C interface to be 
