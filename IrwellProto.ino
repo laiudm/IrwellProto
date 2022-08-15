@@ -84,6 +84,7 @@ ButtonEvents b = ButtonEvents(EVT_NOCHANGE);
 #define   OUT_USB      PA8                // Data line for controlling modes of operation                  
 #define   OUT_CW       PA9                // G6LBQ added extra mode selection output                  
 #define   OUT_AM       PA10               // G6LBQ added extra mode selection output
+#define   OUT_FM       PA11               // G6LBQ added 15/08/22
 #define   SW_BAND      PA0
 #define   SW_STEP      PA1                 
 #define   SW_MODE      PC14                 
@@ -141,8 +142,8 @@ uint16_t vfosel = VFOA;
 int16_t  rit = 0;
 int16_t  ritFreq = 0;
 uint32_t xtalfreq = 25000000;
-uint32_t ifFreq[]  = {11056570,   11059840, 11058400, 11058200, 11058200};
-uint32_t BFOFreq[] = {11056570,   11059840, 11058400,        0,        0};
+uint32_t ifFreq[]  = {11056570,   11059840, 11057048, 11061850, 11061850};
+uint32_t BFOFreq[] = {11056570,   11059840, 11057048,        0,        0};
 int32_t  vfo[] = { 7074000, 14074000 };
 int32_t  convFreq = 45000000;
 uint16_t eeprom_version;
@@ -410,9 +411,9 @@ const char* mode_label[]       = { "LSB", "USB", "CW ", "AM ", "FM " };
 const char* filt_label[]       = { "Full", "7", "6", "5", "4", "3", "2", "1" };
 
 // Band information - last 4 are made up. TODO - provide proper values
-const char* band_label[]       = { "160m",      "80m",    "60m",   "40m",    "30m",    "20m",    "17m",    "15m",    "12m",     "10m",     "6m" };
-const uint8_t bandMode[]  =      { MODE_LSB, MODE_LSB,  MODE_CW, MODE_USB, MODE_USB, MODE_USB,  MODE_AM,  MODE_FM, MODE_USB, MODE_USB, MODE_USB };
-const uint32_t bandFreq[] =      {  3500000,  7000000, 10100000, 14000000, 21000000, 28000000, 30000000, 31000000, 32000000, 33000000, 34000000 };
+const char* band_label[]       = {  "160m",    "80m",    "60m",    "40m",    "30m",    "20m",     "17m",     "15m",    "12m",     "10m",   "MW" };
+const uint8_t bandMode[]       = { MODE_LSB, MODE_LSB,  MODE_LSB, MODE_LSB,  MODE_CW, MODE_USB,  MODE_USB,  MODE_USB, MODE_USB, MODE_USB, MODE_AM };
+const uint32_t bandFreq[]      = {  1900000,  3700000,   5460000,  7100000, 10100000, 14100000,  18100000,  21250000, 24925000, 28250000, 1458000 };
 
 const char* stepsize_label[]   = { "1Hz   ", "10Hz  ", "100Hz ", "1KHz  ", "10KHz ", "100KHz", "1MHz  " };
 const char* vfosel_label[]     = { "VFO A", "VFO B"/*, "Split"*/ };
@@ -511,6 +512,7 @@ void updateModeOutputs(uint8_t mode) {
   digitalWrite(OUT_USB, mode==MODE_USB);
   digitalWrite(OUT_CW,  mode==MODE_CW);       // G6LBQ added 1/11/20
   digitalWrite(OUT_AM,  mode==MODE_AM);       // G6LBQ added 1/11/20
+  digitalWrite(OUT_FM,  mode==MODE_FM);       // G6LBQ added 15/08/22
 }
 
 // Original code was for single conversion IF at 11.059MHz so 11.059MHz + VFO Frequency
@@ -740,15 +742,15 @@ int8_t paramAction(uint8_t action, uint8_t id = ALL) { // list of parameters
     case VFOSEL:  paramAction(action, vfosel,         0x15,  "VFO Mode",   vfosel_label,        0,   _N(vfosel_label)-1, triggerValueChange); break;
     case RIT:     paramAction(action, rit,            0x16,       "RIT",    offon_label,        0,                    1, triggerValueChange); break;
     case RITFREQ: paramAction(action, ritFreq,        0x17,"RIT Offset",           NULL,    -1000,                 1000, triggerValueChange); break;
-    case SIFXTAL: paramAction(action, xtalfreq,       0x81,  "Ref freq",           NULL, 14000000,             28000000, triggerValueChange); break;
-    case IF_LSB:  paramAction(action, ifFreq[0],      0x82,    "IF-LSB",           NULL, 14000000,             28000000, triggerValueChange); break;
-    case IF_USB:  paramAction(action, ifFreq[1],      0x83,    "IF-USB",           NULL, 14000000,             28000000, triggerValueChange); break;
-    case IF_CW:   paramAction(action, ifFreq[2],      0x84,     "IF-CW",           NULL, 14000000,             28000000, triggerValueChange); break;
-    case IF_AM:   paramAction(action, ifFreq[3],      0x85,     "IF-AM",           NULL, 14000000,             28000000, triggerValueChange); break;
-    case IF_FM:   paramAction(action, ifFreq[4],      0x86,     "IF-FM",           NULL, 14000000,             28000000, triggerValueChange); break;
-    case BFO_LSB: paramAction(action, BFOFreq[0],     0x87,   "BFO-LSB",           NULL, 14000000,             28000000, triggerValueChange); break;
-    case BFO_USB: paramAction(action, BFOFreq[1],     0x88,   "BFO-USB",           NULL, 14000000,             28000000, triggerValueChange); break;
-    case BFO_CW:  paramAction(action, BFOFreq[2],     0x89,    "BFO-CW",           NULL, 14000000,             28000000, triggerValueChange); break;
+    case SIFXTAL: paramAction(action, xtalfreq,       0x81,  "Ref freq",           NULL, 24975000,            25025000, triggerValueChange); break;
+    case IF_LSB:  paramAction(action, ifFreq[0],      0x82,    "IF-LSB",           NULL, 8000000,             12000000, triggerValueChange); break;
+    case IF_USB:  paramAction(action, ifFreq[1],      0x83,    "IF-USB",           NULL, 8000000,             12000000, triggerValueChange); break;
+    case IF_CW:   paramAction(action, ifFreq[2],      0x84,     "IF-CW",           NULL, 8000000,             12000000, triggerValueChange); break;
+    case IF_AM:   paramAction(action, ifFreq[3],      0x85,     "IF-AM",           NULL, 8000000,             12000000, triggerValueChange); break;
+    case IF_FM:   paramAction(action, ifFreq[4],      0x86,     "IF-FM",           NULL, 8000000,             12000000, triggerValueChange); break;
+    case BFO_LSB: paramAction(action, BFOFreq[0],     0x87,   "BFO-LSB",           NULL, 8000000,             12000000, triggerValueChange); break;
+    case BFO_USB: paramAction(action, BFOFreq[1],     0x88,   "BFO-USB",           NULL, 8000000,             12000000, triggerValueChange); break;
+    case BFO_CW:  paramAction(action, BFOFreq[2],     0x89,    "BFO-CW",           NULL, 8000000,             12000000, triggerValueChange); break;
 
     // invisible parameters. These are here only for eeprom save/restore
     case FREQA:   paramAction(action, vfo[VFOA],         0,        NULL,           NULL,         0,                    0, triggerNoop       ); break;
@@ -818,6 +820,7 @@ void setup() {
   pinMode(OUT_USB,OUTPUT);                    // USB Mode
   pinMode(OUT_CW,OUTPUT);                     // CW Mode - G6LBQ added additional mode selection
   pinMode(OUT_AM,OUTPUT);                     // AM Mode - G6LBQ added additional mode selection
+  pinMode(OUT_FM,OUTPUT);                     // G6LBQ added 15/08/22
 
   pinMode(debugOut, OUTPUT);                  // temp for debugging
   pinMode(debugTriggered, OUTPUT);
