@@ -74,7 +74,7 @@ Display ucg(__DC, __CS, __RST);
 //----------  Button Setting -----------------
 
 // define event names for the key events
-typedef enum {EVT_NOCHANGE, EVT_PA0_BTNUP, EVT_PA0_LONGPRESS, EVT_PA1_BTNUP, EVT_PA1_LONGPRESS, EVT_PC14_BTNUP, EVT_PC14_LONGPRESS, EVT_PC15_BTNUP, EVT_PC15_LONGPRESS } keyEvents;
+typedef enum {EVT_NOCHANGE, EVT_PA0_BTNUP, EVT_PA0_LONGPRESS, EVT_PA1_BTNUP, EVT_PA1_LONGPRESS, EVT_PA4_BTNUP, EVT_PA4_LONGPRESS, EVT_PC14_BTNUP, EVT_PC14_LONGPRESS, EVT_PC15_BTNUP, EVT_PC15_LONGPRESS } keyEvents;
 
 ButtonEvents b = ButtonEvents(EVT_NOCHANGE);
 
@@ -89,6 +89,7 @@ ButtonEvents b = ButtonEvents(EVT_NOCHANGE);
 #define   SW_STEP      PA1                 
 #define   SW_MODE      PC14                 
 #define   SW_RIT       PC15
+#define   SW_PA4       PA4                // demonstrate adding a new button. (Terrible naming)
 
 //#define   SW_MODE      PB7                 
 //#define   SW_RIT       PA0
@@ -812,6 +813,7 @@ void setup() {
  
   b.add(SW_BAND, EVT_PA0_BTNUP, EVT_PA0_LONGPRESS);
   b.add(SW_STEP, EVT_PA1_BTNUP, EVT_PA1_LONGPRESS);
+  b.add(SW_PA4,  EVT_PA4_BTNUP, EVT_PA4_LONGPRESS);
   b.add(SW_MODE, EVT_PC14_BTNUP, EVT_PC14_LONGPRESS);
   b.add(SW_RIT,  EVT_PC15_BTNUP, EVT_PC15_LONGPRESS);
   
@@ -896,6 +898,16 @@ void loop() {
     case EVT_PA0_BTNUP:     // add back the BAND button
       break;
     case EVT_PA0_LONGPRESS:
+      break;
+      
+    case EVT_PA4_BTNUP:     // RIT on/off
+      rit = rit^1;          // toggle the bottom bit onoff
+      triggerValueChange(0); 
+      break;
+      
+    case EVT_PA4_LONGPRESS:  // VFO toggle
+      vfosel = vfosel^1;
+      triggerValueChange(0);
       break;
       
     case EVT_NOCHANGE:
