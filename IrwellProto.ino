@@ -633,12 +633,14 @@ void setstepDown() {
 void bandUp() {
   bandval = (bandval + 1) % _N(band_label);
   triggerBandChange(0);
+  setEEPROMautoSave();
 }
 
 void bandDown() {
   if (bandval==0) bandval = _N(band_label);
   bandval--;
   triggerBandChange(0);
+  setEEPROMautoSave();
 }
 
 // menu system code
@@ -903,11 +905,13 @@ void loop() {
     case EVT_PA4_BTNUP:     // RIT on/off
       rit = rit^1;          // toggle the bottom bit onoff
       triggerValueChange(0); 
+      setEEPROMautoSave();
       break;
       
     case EVT_PA4_LONGPRESS:  // VFO toggle
       vfosel = vfosel^1;
       triggerValueChange(0);
+      setEEPROMautoSave();
       break;
       
     case EVT_NOCHANGE:
