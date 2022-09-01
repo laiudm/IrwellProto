@@ -519,58 +519,24 @@ void updateModeOutputs(uint8_t mode) {
 // Original code was for single conversion IF at 11.059MHz so 11.059MHz + VFO Frequency
 // 01/07/2022 Changes are for dual conversion so 45MHz firstIF + VFO Frequency 
 
-void updateAllFrquencyOutputsDualConversionOld(uint8_t mode, int32_t freq, int32_t ifshift, int32_t freqRIT, bool transmitting, int32_t xtalFreq) {
-  select_BPF(freq);
-  select_LPF(freq);
-  updateModeOutputs(mode);
-  uint32_t vfofreq = freq + firstIF + freqRIT;
-  if ((mode==MODE_CW) && transmitting)  // is in the original code. Is this correct? Isn't rx offset from the tuned freq to create the tone (or BFO adds)?
-    vfofreq += CW_TONE;
-  setFrequency(VFO_PORT, VFO_CHL, vfofreq, xtalFreq);
+void updateAllFreq() {
+  int32_t freq = vfo[vfosel];
+  int32_t finalIF = ifFreq[mode];
+  int32_t bfoFreq = BFOFreq[mode];
+  int32_t freqRIT = rit ? ritFreq : 0;
   
-  if (mode!=MODE_AM) {
-    setFrequency(BFO_PORT, BFO_CHL, ifshift, xtalFreq);
-  } else {
-    disableFrequency(BFO_PORT, BFO_CHL);
-  }
-  setFrequency(CONV_PORT, CONV_CHL, conversionOffsets[mode], xtalFreq);
-}
-/*
-void updateAllFrquencyOutputsDualConversion(uint8_t mode, int32_t freq, int32_t ifshift, int32_t freqRIT, bool transmitting) {
-  select_BPF(freq);
-  updateModeOutputs(mode);
-  uint32_t vfofreq = freq + firstIF;
-  setFrequency(VFO_PORT, VFO_CHL, vfofreq);
-  switch(mode) {
-    case MODE_USB: MODE_LSB:
-      setFrequency(BFO_PORT, BFO_CHL, bfoFreq);
-      break;
-    case MODE_CW:
-      setFrequency(BFO_PORT, BFO_CHL, bfoFreq + CW_TONE);
-      break;
-    case MODE_AM:
-      disableFrequency(BFO_PORT, BFO_CHL);
-      break;
-    case MODE_FM:
-      disableFrequency(BFO_PORT, BFO_CHL);
-      break;
-  }
-}
-*/
-
-void updateAllFrquencyOutputs(uint8_t mode, int32_t freq, int32_t finalIF, int32_t bfoFreq, int32_t freqRIT, bool transmitting, int32_t xtalFreq) {
   select_BPF(freq);
   select_LPF(freq);
   updateModeOutputs(mode);
   uint32_t vfofreq = freq + finalIF + freqRIT;
-  setFrequency(VFO_PORT, VFO_CHL, vfofreq, xtalFreq);
+  setFrequency(VFO_PORT, VFO_CHL, vfofreq, xtalfreq);
   switch(mode) {
     case MODE_USB: 
     case MODE_LSB:
-      setFrequency(BFO_PORT, BFO_CHL, bfoFreq, xtalFreq);
+      setFrequency(BFO_PORT, BFO_CHL, bfoFreq, xtalfreq);
       break;
     case MODE_CW:
-      setFrequency(BFO_PORT, BFO_CHL, bfoFreq + CW_TONE, xtalFreq);
+      setFrequency(BFO_PORT, BFO_CHL, bfoFreq + CW_TONE, xtalfreq);
       break;
     case MODE_AM:
       disableFrequency(BFO_PORT, BFO_CHL);
@@ -580,17 +546,12 @@ void updateAllFrquencyOutputs(uint8_t mode, int32_t freq, int32_t finalIF, int32
       break;
   }
 }
-
 
 //--------------- value change triggers --------------------------------------
 
 void setEEPROMautoSave() {
   EEPROMautoSave = millis() + EEPROMautoSaveTiming;
   //Serial.print("setEEPROMautoSave = "); Serial.println(EEPROMautoSave);
-}
-
-void updateAllFreq() {
-  updateAllFrquencyOutputs(mode, vfo[vfosel], ifFreq[mode], BFOFreq[mode], rit ? ritFreq : 0, transmitting, xtalfreq);
 }
 
 void triggerVFOChange() {
