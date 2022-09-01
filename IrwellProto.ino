@@ -144,7 +144,6 @@ int16_t  rit = 0;
 int16_t  ritFreq = 0;
 uint32_t xtalfreq = 25000000;
 uint32_t ifFreq[]  = {11056570,   11059840, 11057048, 11061850, 11061850};
-uint32_t BFOFreq[] = {11056570,   11059840, 11057048,        0,        0};
 int32_t  vfo[] = { 7074000, 14074000 };
 int32_t  convFreq = 45000000;
 uint16_t eeprom_version;
@@ -516,13 +515,51 @@ void updateModeOutputs(uint8_t mode) {
   digitalWrite(OUT_FM,  mode==MODE_FM);       // G6LBQ added 15/08/22
 }
 
-// Original code was for single conversion IF at 11.059MHz so 11.059MHz + VFO Frequency
-// 01/07/2022 Changes are for dual conversion so 45MHz firstIF + VFO Frequency 
+#define FIRSTIF 45000000
+
+void updateAllFreqDualConversion() {
+  int32_t freq = vfo[vfosel];
+  int32_t finalIF = ifFreq[mode];
+  int32_t freqRIT = rit ? ritFreq : 0;
+  
+  select_BPF(freq);
+  select_LPF(freq);
+  updateModeOutputs(mode);
+  
+  // set the VFO to put the desired input frequency at 45MHz
+  // set the Conv Oscillator to bring 45MHz to the firstIF frequency
+
+#define FREQINVERSION
+#ifdef FREQINVERSION  
+  uint32_t vfofreq = FIRSTIF + (freq + freqRIT);  // causes frequency inversion
+  uint32_t convFreq = FIRSTIF + finalIF;          // causes frequency inversion
+#else  
+  uint32_t vfofreq = FIRSTIF - (freq + freqRIT);  // no frequency inversion
+  uint32_t convFreq = FIRSTIF - finalIF;          // no frequency inversion
+#endif  
+  
+  setFrequency(VFO_PORT, VFO_CHL, vfofreq, xtalfreq);
+  setFrequency(CONV_PORT, CONV_CHL, convFreq, xtalfreq); // no frequency inversion
+  switch(mode) {
+    case MODE_USB: 
+    case MODE_LSB:
+      setFrequency(BFO_PORT,   BFO_CHL, finalIF, xtalfreq);
+      break;
+    case MODE_CW:
+      setFrequency(BFO_PORT, BFO_CHL, finalIF + CW_TONE, xtalfreq);
+      break;
+    case MODE_AM:
+      disableFrequency(BFO_PORT, BFO_CHL);
+      break;
+    case MODE_FM:
+      disableFrequency(BFO_PORT, BFO_CHL);
+      break;
+  }
+}
 
 void updateAllFreq() {
   int32_t freq = vfo[vfosel];
   int32_t finalIF = ifFreq[mode];
-  int32_t bfoFreq = BFOFreq[mode];
   int32_t freqRIT = rit ? ritFreq : 0;
   
   select_BPF(freq);
@@ -533,10 +570,10 @@ void updateAllFreq() {
   switch(mode) {
     case MODE_USB: 
     case MODE_LSB:
-      setFrequency(BFO_PORT, BFO_CHL, bfoFreq, xtalfreq);
+      setFrequency(BFO_PORT, BFO_CHL, finalIF, xtalfreq);
       break;
     case MODE_CW:
-      setFrequency(BFO_PORT, BFO_CHL, bfoFreq + CW_TONE, xtalfreq);
+      setFrequency(BFO_PORT, BFO_CHL, finalIF + CW_TONE, xtalfreq);
       break;
     case MODE_AM:
       disableFrequency(BFO_PORT, BFO_CHL);
@@ -712,9 +749,6 @@ int8_t paramAction(uint8_t action, uint8_t id = ALL) { // list of parameters
     case IF_CW:   paramAction(action, ifFreq[2],      0x84,     "IF-CW",           NULL, 8000000,             12000000, triggerValueChange); break;
     case IF_AM:   paramAction(action, ifFreq[3],      0x85,     "IF-AM",           NULL, 8000000,             12000000, triggerValueChange); break;
     case IF_FM:   paramAction(action, ifFreq[4],      0x86,     "IF-FM",           NULL, 8000000,             12000000, triggerValueChange); break;
-    case BFO_LSB: paramAction(action, BFOFreq[0],     0x87,   "BFO-LSB",           NULL, 8000000,             12000000, triggerValueChange); break;
-    case BFO_USB: paramAction(action, BFOFreq[1],     0x88,   "BFO-USB",           NULL, 8000000,             12000000, triggerValueChange); break;
-    case BFO_CW:  paramAction(action, BFOFreq[2],     0x89,    "BFO-CW",           NULL, 8000000,             12000000, triggerValueChange); break;
 
     // invisible parameters. These are here only for eeprom save/restore
     case FREQA:   paramAction(action, vfo[VFOA],         0,        NULL,           NULL,         0,                    0, triggerNoop       ); break;
