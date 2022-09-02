@@ -74,7 +74,8 @@ Display ucg(__DC, __CS, __RST);
 //----------  Button Setting -----------------
 
 // define event names for the key events
-typedef enum {EVT_NOCHANGE, EVT_PA0_BTNUP, EVT_PA0_LONGPRESS, EVT_PA1_BTNUP, EVT_PA1_LONGPRESS, EVT_PA4_BTNUP, EVT_PA4_LONGPRESS, EVT_PC14_BTNUP, EVT_PC14_LONGPRESS, EVT_PC15_BTNUP, EVT_PC15_LONGPRESS } keyEvents;
+typedef enum {EVT_NOCHANGE, EVT_PA0_BTNUP, EVT_PA0_LONGPRESS, EVT_PA1_BTNUP, EVT_PA1_LONGPRESS, EVT_PA4_BTNUP, EVT_PA4_LONGPRESS, EVT_PC14_BTNUP, 
+              EVT_PC14_LONGPRESS, EVT_PC15_BTNUP, EVT_PC15_LONGPRESS, EVT_PA2_BTNUP, EVT_PA2_LONGPRESS } keyEvents;
 
 ButtonEvents b = ButtonEvents(EVT_NOCHANGE);
 
@@ -90,6 +91,11 @@ ButtonEvents b = ButtonEvents(EVT_NOCHANGE);
 #define   SW_MODE      PC14                 
 #define   SW_RIT       PC15
 #define   SW_PA4       PA4                // demonstrate adding a new button. (Terrible naming)
+#define   SW_ATTEN     PA6
+
+#define   OUT_ATT0     PB3
+#define   OUT_ATT1     PB4
+#define   OUT_ATT2     PB5
 
 //#define   SW_MODE      PB7                 
 //#define   SW_RIT       PA0
@@ -103,9 +109,7 @@ ButtonEvents b = ButtonEvents(EVT_NOCHANGE);
 
 #define debugOut       PB5                // a couple of debug outputs
 #define debugTriggered PB4
-
-
-#define   METER        PA2                // G6LBQ changed from PA1 to PA2    
+ 
 
 //---------  Si5351 Assignments ---------------------------
 #define   VFO_PORT     0
@@ -126,7 +130,7 @@ typedef enum {MODE_LSB, MODE_USB, MODE_CW, MODE_AM, MODE_FM} modes;
 
 //---------- Variable setting ----------
 
-#define _N(a) sizeof(a)/sizeof(a[0])
+#define _N(a) (sizeof(a)/sizeof(a[0]))
 
 enum vfo_t { VFOA=0, VFOB=1, SPLIT=2 };
 
@@ -136,6 +140,7 @@ enum vfo_t { VFOA=0, VFOB=1, SPLIT=2 };
 // As a convenience they are in the order they appear in the menu
 
 int16_t  mode = MODE_USB;
+int16_t  atten = 0;
 int16_t  filt = 0;
 int16_t  bandval = 3;
 int16_t  stepsize = 3;  //todo revisit - uSDX uses an enum
@@ -148,7 +153,7 @@ int32_t  vfo[] = { 7074000, 14074000 };
 int32_t  convFreq = 45000000;
 uint16_t eeprom_version;
 
-#define get_version_id() 5
+#define get_version_id() 6
 
 // end of state variables stored in eeprom
 
@@ -177,7 +182,7 @@ int8_t  menu = 1;  // current parameter id selected in menu
 
 
 enum action_t { UPDATE, UPDATE_MENU, NEXT_MENU, LOAD, SAVE, SKIP, NEXT_CH };
-enum params_t {NULL_, MODE, FILTER, BAND, STEP, VFOSEL, RIT, RITFREQ, SIFXTAL, IF_LSB, IF_USB, IF_CW, IF_AM, IF_FM, BFO_LSB, BFO_USB, BFO_CW, FREQA, FREQB, VERS, ALL=0xff};
+enum params_t {NULL_, MODE, FILTER, BAND, STEP, VFOSEL, RIT, RITFREQ, ATTEN, SIFXTAL, IF_LSB, IF_USB, IF_CW, IF_AM, IF_FM, BFO_LSB, BFO_USB, BFO_CW, FREQA, FREQB, VERS, ALL=0xff};
 #define N_PARAMS 16                 // number of (visible) parameters
 #define N_ALL_PARAMS (N_PARAMS+3)  // total of all parameters
 
@@ -322,6 +327,12 @@ void select_LPF(uint32_t freq) {
   }
 }
 
+void select_Attenuator(uint16_t atten) {
+  digitalWrite(OUT_ATT0, atten==1);
+  digitalWrite(OUT_ATT1, atten==2);
+  digitalWrite(OUT_ATT2, atten==3);
+}
+
 // -----     Routine to interface to the TCA9548A -----
 
 #define TCAADDR 0x70
@@ -418,6 +429,7 @@ const uint32_t bandFreq[]      = {  1900000,  3700000,   5460000,  7100000, 1010
 const char* stepsize_label[]   = { "1Hz   ", "10Hz  ", "100Hz ", "1KHz  ", "10KHz ", "100KHz", "1MHz  " };
 const char* vfosel_label[]     = { "VFO A", "VFO B"/*, "Split"*/ };
 const char* offon_label[]      = {"OFF", "ON"};
+const char* atten_label[]      = {"OFF ", "6dB ", "12dB", "18dB"};
 
 
 //------------- display subsystem  --------------------------------
@@ -486,6 +498,10 @@ void updateScreen() {
   //ucg.setPrintPos( 144, 176); ucg.print(offon_label[rit]); ucg.print("  ");
   sprintf(buff,"%-+5i", ritFreq);
   ucg.setPrintPos( 216, 150); ucg.setColor(255, 255, 255); ucg.print(buff);
+
+  // print attentuator setting
+  ucg.setPrintPos( 0, 150); ucg.setFont(fontMedium); ucg.setColor(255, 0, 0); ucg.print("Att");
+  ucg.setPrintPos(50, 150); ucg.setColor(1, 0, 0, 0); ucg.setColor(0, 255, 255); ucg.print(atten_label[atten]);
 }
 
 void printBlanks(){
@@ -605,6 +621,7 @@ void triggerBandChange(int menu) {
 
 // Anything could have changed so calculate _everything_
 void triggerValueChange(int menu) {
+  select_Attenuator(atten);
   updateAllFreq();
   updateScreen();
 }
@@ -743,6 +760,7 @@ int8_t paramAction(uint8_t action, uint8_t id = ALL) { // list of parameters
     case VFOSEL:  paramAction(action, vfosel,         0x15,  "VFO Mode",   vfosel_label,        0,   _N(vfosel_label)-1, triggerValueChange); break;
     case RIT:     paramAction(action, rit,            0x16,       "RIT",    offon_label,        0,                    1, triggerValueChange); break;
     case RITFREQ: paramAction(action, ritFreq,        0x17,"RIT Offset",           NULL,    -1000,                 1000, triggerValueChange); break;
+    case ATTEN:   paramAction(action, atten,          0x18,     "Atten",    atten_label,        0,   _N(atten_label)-1, triggerValueChange); break;
     case SIFXTAL: paramAction(action, xtalfreq,       0x81,  "Ref freq",           NULL, 24975000,            25025000, triggerValueChange); break;
     case IF_LSB:  paramAction(action, ifFreq[0],      0x82,    "IF-LSB",           NULL, 8000000,             12000000, triggerValueChange); break;
     case IF_USB:  paramAction(action, ifFreq[1],      0x83,    "IF-USB",           NULL, 8000000,             12000000, triggerValueChange); break;
@@ -813,6 +831,7 @@ void setup() {
   b.add(SW_PA4,  EVT_PA4_BTNUP, EVT_PA4_LONGPRESS);
   b.add(SW_MODE, EVT_PC14_BTNUP, EVT_PC14_LONGPRESS);
   b.add(SW_RIT,  EVT_PC15_BTNUP, EVT_PC15_LONGPRESS);
+  b.add(SW_ATTEN,EVT_PA2_BTNUP, EVT_PA2_LONGPRESS);
   
   pinMode(SW_TX,INPUT_PULLUP);
   pinMode(OUT_LSB,OUTPUT);                    // LSB Mode 
@@ -820,6 +839,9 @@ void setup() {
   pinMode(OUT_CW,OUTPUT);                     // CW Mode - G6LBQ added additional mode selection
   pinMode(OUT_AM,OUTPUT);                     // AM Mode - G6LBQ added additional mode selection
   pinMode(OUT_FM,OUTPUT);                     // G6LBQ added 15/08/22
+  pinMode(OUT_ATT0, OUTPUT);
+  pinMode(OUT_ATT1, OUTPUT);
+  pinMode(OUT_ATT2, OUTPUT);
 
   pinMode(debugOut, OUTPUT);                  // temp for debugging
   pinMode(debugTriggered, OUTPUT);
@@ -848,6 +870,7 @@ void setup() {
     paramAction(SAVE);  // save default parameter values
     ucg.setPrintPos( 0, 44); ucg.print("Reset settings..");
     delay(1000);
+    //todo - clear screen properly
   }
   paramAction(LOAD);  // load all parameters
   traceEEPROM("After Load-all eeprom_version: %i", eeprom_version);
@@ -911,6 +934,19 @@ void loop() {
       
     case EVT_NOCHANGE:
       break; // nothing to do
+
+    case EVT_PA2_BTNUP:
+      atten = (atten + 1) % _N(atten_label);
+      triggerValueChange(0);
+      break;
+
+   case EVT_PA2_LONGPRESS:
+      atten = atten - 1;
+      if (atten < 0) {
+        atten = _N(atten_label) - 1;
+      }
+      triggerValueChange(0);
+      break;
   }
 
   if (menumode) {
