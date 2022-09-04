@@ -153,7 +153,7 @@ int32_t  vfo[] = { 7074000, 14074000 };
 int32_t  convFreq = 45000000;
 uint16_t eeprom_version;
 
-#define get_version_id() 6
+#define get_version_id() 7
 
 // end of state variables stored in eeprom
 
@@ -182,8 +182,8 @@ int8_t  menu = 1;  // current parameter id selected in menu
 
 
 enum action_t { UPDATE, UPDATE_MENU, NEXT_MENU, LOAD, SAVE, SKIP, NEXT_CH };
-enum params_t {NULL_, MODE, FILTER, BAND, STEP, VFOSEL, RIT, RITFREQ, ATTEN, SIFXTAL, IF_LSB, IF_USB, IF_CW, IF_AM, IF_FM, BFO_LSB, BFO_USB, BFO_CW, FREQA, FREQB, VERS, ALL=0xff};
-#define N_PARAMS 16                 // number of (visible) parameters
+enum params_t {NULL_, MODE, FILTER, BAND, STEP, VFOSEL, RIT, RITFREQ, ATTEN, SIFXTAL, IF_LSB, IF_USB, IF_CW, IF_AM, IF_FM, FREQA, FREQB, VERS, ALL=0xff};
+#define N_PARAMS 14                // number of (visible) parameters
 #define N_ALL_PARAMS (N_PARAMS+3)  // total of all parameters
 
 
