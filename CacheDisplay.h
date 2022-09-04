@@ -23,6 +23,10 @@ typedef struct hashmap {
 
 Hashmap hash;
 
+void clearCache() {
+  memset(&hash, 0, sizeof(hash));
+}
+
 uint16_t hashcode(uint8_t x, uint8_t y) {
   uint16_t result = ((x+1) * (y+1)) % ENTRIES; // add 1 to avoid 0 on x or y axis crashing the hash
   //uint16_t result = (x*256 + y) % ENTRIES;
@@ -72,6 +76,11 @@ public:
     super(cd, cs, reset)
     { };
 
+  void clearScreen() {
+    clearCache();
+    super::clearScreen();
+  }
+  
   void setFont(const ucg_fntpgm_uint8_t  *font) {
     // Memoising the setFont() and getStrWidth() calls doubles! updateScreen() execution speed.
     // These few lines of code are well worth it

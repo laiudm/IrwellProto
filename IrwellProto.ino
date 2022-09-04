@@ -823,8 +823,7 @@ void setup() {
   ucg.begin(UCG_FONT_MODE_SOLID);
   ucg.clearScreen();
   ucg.setRotate270();
-  ucg.setColor(1, 0, 0, 0);       // set background color
-  paintBackground();
+  ucg.setColor(1, 0, 0, 0);       // set foreground color
  
   b.add(SW_BAND, EVT_PA0_BTNUP, EVT_PA0_LONGPRESS);
   b.add(SW_STEP, EVT_PA1_BTNUP, EVT_PA1_LONGPRESS);
@@ -868,13 +867,14 @@ void setup() {
     traceEEPROM("Reload - eeprom_version: %i", eeprom_version);
     eeprom_version = get_version_id();
     paramAction(SAVE);  // save default parameter values
-    ucg.setPrintPos( 0, 44); ucg.print("Reset settings..");
+    ucg.setFont(fontTiny); ucg.setPrintPos( 0, 44); ucg.setColor(235,0,200); ucg.print("Reset settings..");
     delay(1000);
-    //todo - clear screen properly
+    ucg.clearScreen();
   }
   paramAction(LOAD);  // load all parameters
   traceEEPROM("After Load-all eeprom_version: %i", eeprom_version);
 
+  paintBackground();
   triggerValueChange(0);
 }
 
