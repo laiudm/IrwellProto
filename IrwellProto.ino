@@ -85,7 +85,7 @@ ButtonEvents b = ButtonEvents(EVT_NOCHANGE);
 #define   OUT_USB      PA8                // Data line for controlling modes of operation                  
 #define   OUT_CW       PA9                // G6LBQ added extra mode selection output                  
 #define   OUT_AM       PA10               // G6LBQ added extra mode selection output
-#define   OUT_FM       PA11               // G6LBQ added 15/08/22
+#define   OUT_FM       PB14               // G6LBQ changed from PA11 to PB14
 #define   SW_BAND      PA0
 #define   SW_STEP      PA1                 
 #define   SW_MODE      PC14                 
@@ -93,18 +93,18 @@ ButtonEvents b = ButtonEvents(EVT_NOCHANGE);
 #define   SW_PA4       PA4                // demonstrate adding a new button. (Terrible naming)
 #define   SW_ATTEN     PA6
 
-#define   OUT_ATT0     PB3
-#define   OUT_ATT1     PB4
-#define   OUT_ATT2     PB5
+#define   OUT_ATT0     PA2
+#define   OUT_ATT1     PA3
+#define   OUT_ATT2     PB3
 
 //#define   SW_MODE      PB7                 
 //#define   SW_RIT       PA0
 
 #ifdef BLUEPILL
 #define   LED          PC13
-#define   SW_TX        PA3                // need to reassign to move away from led
+#define   SW_TX        PB11               // G6LBQ changed for hardware compatibility
 #else                  
-#define   SW_TX        PC13               // G6LBQ> PTT - connect to Gnd for TX
+#define   SW_TX        PB11               // G6LBQ changed for hardware compatibility
 #endif
 
 #define debugOut       PB5                // a couple of debug outputs
