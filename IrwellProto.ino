@@ -533,6 +533,7 @@ void updateModeOutputs(uint8_t mode) {
 
 #define FIRSTIF 45000000
 
+// change this to void updateAllFreq() when going to dual-conversion
 void updateAllFreqDualConversion() {
   int32_t freq = vfo[vfosel];
   int32_t finalIF = ifFreq[mode];
@@ -545,7 +546,7 @@ void updateAllFreqDualConversion() {
   // set the VFO to put the desired input frequency at 45MHz
   // set the Conv Oscillator to bring 45MHz to the firstIF frequency
 
-#define FREQINVERSION
+//#define FREQINVERSION
 #ifdef FREQINVERSION  
   uint32_t vfofreq = FIRSTIF + (freq + freqRIT);  // causes frequency inversion
   uint32_t convFreq = FIRSTIF + finalIF;          // causes frequency inversion
@@ -573,6 +574,7 @@ void updateAllFreqDualConversion() {
   }
 }
 
+// change this to updateAllFreqHide() when going to dual-conversion
 void updateAllFreq() {
   int32_t freq = vfo[vfosel];
   int32_t finalIF = ifFreq[mode];
