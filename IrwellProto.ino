@@ -13,7 +13,7 @@
 #define TRACEI2C    // uncomment to generate debug traces on I2C outputs. BLUEPILL must be defined for Serial to work
 #define DEBUG
 
-#define OPTICAL_ENCODER
+//#define OPTICAL_ENCODER
 #ifdef OPTICAL_ENCODER
 #define ROTARY_LOW_SENSITIVITY 10   // encoder sensitivity for menu operations.
 #define ROTARY_HIGH_SENSITIVITY 4   // encoder sensitivity for VFO.
@@ -106,10 +106,6 @@ ButtonEvents b = ButtonEvents(EVT_NOCHANGE);
 #else                  
 #define   SW_TX        PB11               // G6LBQ changed for hardware compatibility
 #endif
-
-#define debugOut       PB5                // a couple of debug outputs
-#define debugTriggered PB4
- 
 
 //---------  Si5351 Assignments ---------------------------
 #define   VFO_PORT     0
@@ -211,7 +207,6 @@ void Rotary_enc() {
   static bool rotationEvent = false;  // this could possibly be rolled into the last_state variable, but code readability?
   static uint8_t last_state = 0;
 
-  digitalWrite(debugOut,!digitalRead(debugOut));
   interruptCount++;   // investigate very high interupt rate
   uint8_t state = (digitalRead(ENC_B) << 1) | digitalRead(ENC_A);
   if (!rotationEvent && (state==0x0)) {
@@ -845,9 +840,6 @@ void setup() {
   pinMode(OUT_ATT0, OUTPUT);
   pinMode(OUT_ATT1, OUTPUT);
   pinMode(OUT_ATT2, OUTPUT);
-
-  pinMode(debugOut, OUTPUT);                  // temp for debugging
-  pinMode(debugTriggered, OUTPUT);
 
   init_BPF();
   init_LPF();
