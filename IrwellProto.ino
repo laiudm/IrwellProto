@@ -146,10 +146,10 @@ int16_t  ritFreq = 0;
 uint32_t xtalfreq = 25000000;
 uint32_t ifFreq[]  = {11056570,   11059840, 11057048, 11061850, 11061850};
 int32_t  vfo[] = { 7074000, 14074000 };
-int32_t  convFreq = 45000000;
+uint32_t firstIF = 45000000;
 uint16_t eeprom_version;
 
-#define get_version_id() 7
+#define get_version_id() 8
 
 // end of state variables stored in eeprom
 
@@ -178,8 +178,8 @@ int8_t  menu = 1;  // current parameter id selected in menu
 
 
 enum action_t { UPDATE, UPDATE_MENU, NEXT_MENU, LOAD, SAVE, SKIP, NEXT_CH };
-enum params_t {NULL_, MODE, FILTER, BAND, STEP, VFOSEL, RIT, RITFREQ, ATTEN, SIFXTAL, IF_LSB, IF_USB, IF_CW, IF_AM, IF_FM, FREQA, FREQB, VERS, ALL=0xff};
-#define N_PARAMS 14                // number of (visible) parameters
+enum params_t {NULL_, MODE, FILTER, BAND, STEP, VFOSEL, RIT, RITFREQ, ATTEN, SIFXTAL, IF_LSB, IF_USB, IF_CW, IF_AM, IF_FM, FIRSTIF, FREQA, FREQB, VERS, ALL=0xff};
+#define N_PARAMS 15                // number of (visible) parameters
 #define N_ALL_PARAMS (N_PARAMS+3)  // total of all parameters
 
 
@@ -514,10 +514,6 @@ void printTXstate(bool tx) {  // TODO - may need to rework this
 
 //--------------- Business Logic---------------------------------------------
 
-#define firstIF 45000000L       // Added by G6LBQ 01/07/2022
-
-
-
 void updateModeOutputs(uint8_t mode) {
   digitalWrite(OUT_LSB, mode==MODE_LSB);
   digitalWrite(OUT_USB, mode==MODE_USB);
@@ -525,8 +521,6 @@ void updateModeOutputs(uint8_t mode) {
   digitalWrite(OUT_AM,  mode==MODE_AM);       // G6LBQ added 1/11/20
   digitalWrite(OUT_FM,  mode==MODE_FM);       // G6LBQ added 15/08/22
 }
-
-#define FIRSTIF 45000000
 
 // change this to void updateAllFreq() when going to dual-conversion
 void updateAllFreqDualConversion() {
@@ -545,11 +539,11 @@ void updateAllFreqDualConversion() {
 
 //#define HIGHSIDEVFO
 #ifdef HIGHSIDEVFO
-  uint32_t vfofreq = FIRSTIF + (freq + freqRIT);  // causes frequency inversion
-  uint32_t convFreq = FIRSTIF - finalIF;          // no frequency inversion
+  uint32_t vfofreq = firstIF + (freq + freqRIT);  // causes frequency inversion
+  uint32_t convFreq = firstIF - finalIF;          // no frequency inversion
 #else  
-  uint32_t vfofreq = FIRSTIF - (freq + freqRIT);  // low side VFO, no frequency inversion
-  uint32_t convFreq = FIRSTIF + finalIF;          // causes frequency inversion
+  uint32_t vfofreq = firstIF - (freq + freqRIT);  // low side VFO, no frequency inversion
+  uint32_t convFreq = firstIF + finalIF;          // causes frequency inversion
 #endif  
   
   setFrequency(VFO_PORT, VFO_CHL, vfofreq, xtalfreq);
@@ -766,7 +760,8 @@ int8_t paramAction(uint8_t action, uint8_t id = ALL) { // list of parameters
     case IF_CW:   paramAction(action, ifFreq[2],      0x84,     "IF-CW",           NULL, 8000000,             12000000, triggerValueChange); break;
     case IF_AM:   paramAction(action, ifFreq[3],      0x85,     "IF-AM",           NULL, 8000000,             12000000, triggerValueChange); break;
     case IF_FM:   paramAction(action, ifFreq[4],      0x86,     "IF-FM",           NULL, 8000000,             12000000, triggerValueChange); break;
-
+    case FIRSTIF: paramAction(action, firstIF,        0x87,  "First IF",           NULL,42000000,             48000000, triggerValueChange); break;
+    
     // invisible parameters. These are here only for eeprom save/restore
     case FREQA:   paramAction(action, vfo[VFOA],         0,        NULL,           NULL,         0,                    0, triggerNoop       ); break;
     case FREQB:   paramAction(action, vfo[VFOB],         0,        NULL,           NULL,         0,                    0, triggerNoop       ); break;
