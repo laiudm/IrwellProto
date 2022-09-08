@@ -545,14 +545,16 @@ void updateAllFreqDualConversion() {
   
   // set the VFO to put the desired input frequency at 45MHz
   // set the Conv Oscillator to bring 45MHz to the firstIF frequency
+  // set each so that the net result is for frequency inversion to occur (to keep the 
+  // rest of the radio unchanged
 
-//#define FREQINVERSION
-#ifdef FREQINVERSION  
+//#define HIGHSIDEVFO
+#ifdef HIGHSIDEVFO
   uint32_t vfofreq = FIRSTIF + (freq + freqRIT);  // causes frequency inversion
-  uint32_t convFreq = FIRSTIF + finalIF;          // causes frequency inversion
-#else  
-  uint32_t vfofreq = FIRSTIF - (freq + freqRIT);  // no frequency inversion
   uint32_t convFreq = FIRSTIF - finalIF;          // no frequency inversion
+#else  
+  uint32_t vfofreq = FIRSTIF - (freq + freqRIT);  // low side VFO, no frequency inversion
+  uint32_t convFreq = FIRSTIF + finalIF;          // causes frequency inversion
 #endif  
   
   setFrequency(VFO_PORT, VFO_CHL, vfofreq, xtalfreq);
@@ -560,7 +562,7 @@ void updateAllFreqDualConversion() {
   switch(mode) {
     case MODE_USB: 
     case MODE_LSB:
-      setFrequency(BFO_PORT,   BFO_CHL, finalIF, xtalfreq);
+      setFrequency(BFO_PORT, BFO_CHL, finalIF, xtalfreq);
       break;
     case MODE_CW:
       setFrequency(BFO_PORT, BFO_CHL, finalIF + CW_TONE, xtalfreq);
