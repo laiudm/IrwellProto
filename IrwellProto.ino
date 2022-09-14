@@ -13,7 +13,7 @@
 #define TRACEI2C    // uncomment to generate debug traces on I2C outputs. BLUEPILL must be defined for Serial to work
 #define DEBUG
 
-//#define OPTICAL_ENCODER
+#define OPTICAL_ENCODER
 #ifdef OPTICAL_ENCODER
 #define ROTARY_LOW_SENSITIVITY 10   // encoder sensitivity for menu operations.
 #define ROTARY_HIGH_SENSITIVITY 4   // encoder sensitivity for VFO.
@@ -222,6 +222,9 @@ int8_t lastReadVal;
 int lastSensitivity = 1;
 
 int8_t readEncoder(int sensitivity) {
+  if (sensitivity != lastSensitivity) {
+    encoder_val = 0;  // prevent frequency increment on exiting the menu system (high sensitivity only)
+  }
   lastReadVal = encoder_val/sensitivity;
   lastSensitivity = sensitivity;
   return lastReadVal;
