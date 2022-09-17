@@ -7,13 +7,10 @@
 //   Created by G6LBQ on 15/09/2020 
 ///////////////////////////////////////////////////////////////////////////////////
 
-
-#define BLUEPILL    // uncomment to tweak some i/o ports for the blue pill, and enable Serial
+//#define REQUIRESERIALCONNECTED    // uncomment to stall on startup until usb serial is connected
 #define MOCKI2C     // uncomment this to mock transmission to the 2x pcf8574 , Si5351s
-#define TRACEI2C    // uncomment to generate debug traces on I2C outputs. BLUEPILL must be defined for Serial to work
-#define DEBUG
 
-#define OPTICAL_ENCODER
+//#define OPTICAL_ENCODER         // uncomment this line for an optical encoder
 #ifdef OPTICAL_ENCODER
 #define ROTARY_LOW_SENSITIVITY 10   // encoder sensitivity for menu operations.
 #define ROTARY_HIGH_SENSITIVITY 4   // encoder sensitivity for VFO.
@@ -39,28 +36,36 @@
 
 //---------- Serial Debug Output -----------------------
 
+// All output on the usb port comes through this routine.
+// Be aware that writing while a host isn't connected could make this print
+// run slowly, unless precautions are taken. See:
+// http://docs.leaflabs.com/static.leaflabs.com/pub/leaflabs/maple-docs/latest/lang/api/serialusb.html#lang-serialusb and
+// http://docs.leaflabs.com/static.leaflabs.com/pub/leaflabs/maple-docs/latest/lang/api/serialusb.html#lang-serialusb-safe-print 
+
 void debugPrintf(const char * format, ...) {
   char buff[100];
   va_list va;
   va_start(va, format);
   vsnprintf(buff, sizeof buff, format, va);
   va_end(va);
-  Serial.println(buff);
+  if (Serial.isConnected() && Serial.getDTR()) {
+    Serial.println(buff);
+  }
 }
 
-// Work in Progress - ignore for the moment
-//#define TRACEI2CdebugPrintf(format, ...) debugPrintf(format, __VAR_ARGS__)
-//#define trace(type, format, ...) type##debugPrintf(format, __VA_ARGS__)
 
 #define traceError(format, ...)
 #define traceI2C(format, ...)
 #define traceEEPROM(format, ...)
 #define traceDisplay(format, ...)
+#define traceLog(format, ...)
 
+// uncomment the following lines to re-enable tracing
 #define traceError(format, ...) debugPrintf(format, __VA_ARGS__)
 #define traceI2C(format, ...) debugPrintf(format, __VA_ARGS__)
 //#define traceEEPROM(format, ...) debugPrintf(format, __VA_ARGS__)
 //#define traceDisplay(format, ...) debugPrintf(format, __VA_ARGS__)
+#define traceLog(format, ...) debugPrintf(format, __VA_ARGS__)
 
 //----------   TFT setting  ------------------- 
 
@@ -87,7 +92,8 @@ ButtonEvents b = ButtonEvents(EVT_NOCHANGE);
 #define   OUT_AM       PA10               // G6LBQ added extra mode selection output
 #define   OUT_FM       PB14               // G6LBQ changed from PA11 to PB14
 #define   SW_BAND      PA0
-#define   SW_STEP      PA1                 
+#define   SW_STEP      PA1
+#define   SW_TX        PB11               // G6LBQ changed for hardware compatibility               
 #define   SW_MODE      PC14                 
 #define   SW_RIT       PC15
 #define   SW_PA4       PA4                // demonstrate adding a new button. (Terrible naming)
@@ -100,12 +106,8 @@ ButtonEvents b = ButtonEvents(EVT_NOCHANGE);
 //#define   SW_MODE      PB7                 
 //#define   SW_RIT       PA0
 
-#ifdef BLUEPILL
 #define   LED          PC13
-#define   SW_TX        PB11               // G6LBQ changed for hardware compatibility
-#else                  
-#define   SW_TX        PB11               // G6LBQ changed for hardware compatibility
-#endif
+
 
 //---------  Si5351 Assignments ---------------------------
 #define   VFO_PORT     0
@@ -187,9 +189,6 @@ enum params_t {NULL_, MODE, FILTER, BAND, STEP, VFOSEL, RIT, RITFREQ, ATTEN, SIF
 //---------- Rotary Encoder Processing -----------------------
 
 volatile int8_t encoder_val = 0;
-int32_t interruptCount = 0;
-int32_t lastInterruptCount = -1;
-int_fast32_t interruptsTimeExpired = 0; 
  
 void initRotary() {
   pinMode( ENC_A, INPUT_PULLUP);
@@ -207,7 +206,6 @@ void Rotary_enc() {
   static bool rotationEvent = false;  // this could possibly be rolled into the last_state variable, but code readability?
   static uint8_t last_state = 0;
 
-  interruptCount++;   // investigate very high interupt rate
   uint8_t state = (digitalRead(ENC_B) << 1) | digitalRead(ENC_A);
   if (!rotationEvent && (state==0x0)) {
       rotationEvent = true;
@@ -600,7 +598,6 @@ void updateAllFreq() {
 
 void setEEPROMautoSave() {
   EEPROMautoSave = millis() + EEPROMautoSaveTiming;
-  //Serial.print("setEEPROMautoSave = "); Serial.println(EEPROMautoSave);
 }
 
 void triggerVFOChange() {
@@ -666,7 +663,6 @@ void clearMenuArea(){
 }
 
 void printmenuid(uint8_t menuid){ // output menuid in x.y format
-  //Serial.print("printmenuid "); Serial.println(menuid);
   static const char separator[] = {'.', ' '};
   uint8_t ids[] = {(uint8_t)(menuid >> 4), (uint8_t)(menuid & 0xF)};
   for(int i = 0; i < 2; i++){
@@ -778,7 +774,6 @@ int8_t paramAction(uint8_t action, uint8_t id = ALL) { // list of parameters
 }
 
 void processMenuKey() {
-  Serial.println("processmenukey");
     if     (menumode == 0){ menumode = 1; paramAction(UPDATE_MENU, menu);}  // enter menu mode
     else if(menumode == 1){ menumode = 2; paramAction(UPDATE_MENU, menu);}            // enter value selection screen
     else if(menumode >= 2){ paramAction(SAVE, menu); menumode = 0; clearMenuArea();}  // save value, and return to default screen
@@ -808,12 +803,11 @@ void processMenu() {
 //------------------  Initialization -------------------------
  
 void setup() {
-#ifdef BLUEPILL
+#ifdef REQUIRESERIALCONNECTED
   while (!Serial)
     ;
-  Serial.println("Starting setup");
-  pinMode(LED, OUTPUT);
-#endif
+  traceLog("Starting setup\n", 0);
+#endif    
 
   initRotary();
   
@@ -829,6 +823,7 @@ void setup() {
   b.add(SW_RIT,  EVT_PC15_BTNUP, EVT_PC15_LONGPRESS);
   b.add(SW_ATTEN,EVT_PA2_BTNUP, EVT_PA2_LONGPRESS);
   
+  pinMode(LED, OUTPUT);
   pinMode(SW_TX,INPUT_PULLUP);
   pinMode(OUT_LSB,OUTPUT);                    // LSB Mode 
   pinMode(OUT_USB,OUTPUT);                    // USB Mode
@@ -875,23 +870,9 @@ void setup() {
 //----------  Main program  ------------------------------------
 
 void loop() {
-#ifdef BLUEPILL
+
   digitalWrite(LED, !digitalRead(LED));
-#endif
 
-#define DEBUG
-#ifdef DEBUG
-  if ( interruptCount != lastInterruptCount ) {
-    if (millis() > interruptsTimeExpired) { 
-      //Serial.print("Interrupts: "); Serial.println(interruptCount);
-      lastInterruptCount = interruptCount;
-      interruptsTimeExpired = millis() + 1000;  // update max of one a second
-      //delay(1000);
-    }
-  }
-#endif
-
-  
   int event = b.getButtonEvent();
   switch (event) {
      case EVT_PC15_BTNUP: // was the RIT button
@@ -986,12 +967,12 @@ void loop() {
   if (Serial.available()) {
     int ch = Serial.read();
     if (ch == 't') {
+      // debug measure screen performance - updateScreen() and changing fonts.
       long dt = micros();
       updateScreen();
       updateScreen();
       dt = micros() - dt;
-      Serial.print("Time for for updateScreen: "); Serial.println(dt);
-
+      traceLog("Time for for updateScreen: %i\n", dt);
       dt = micros();
       ucg.setFont(fontHuge);
       ucg.getStrWidth(" ");
@@ -1002,27 +983,26 @@ void loop() {
       ucg.setFont(fontTiny);
       ucg.getStrWidth(" ");
       dt = micros() - dt;
-      Serial.print("Time for for setFont, getStrWidth: "); Serial.println(dt);
+      traceLog("Time for for setFont, getStrWidth: %i\n", dt);
       
-    } else if (ch == 'd') {
+    } else if (ch == 'd') { 
+      // debug only to measure screen write time
       ucg.setPrintPos( 0, 198);
       long dt = micros();
-      //displayRawText("Time this string1234", 20, 20, DISPLAY_RED, DISPLAY_DARKGREEN);
       ucg.print("Time this string1234");
       dt = micros() - dt;
-      Serial.print("Time for 20 chars: "); Serial.println(dt);
+      traceLog("Time for 20 chars: %i\n", dt);
     } else if (ch == 's') {
-    
-      Serial.print("menumode: "); Serial.println(menumode);
-      Serial.print("mode: "); Serial.println(mode);
-      Serial.print("filt: "); Serial.println(filt);
-      Serial.print("stepsize: "); Serial.println(stepsize);
-      Serial.print("vfosel: "); Serial.println(vfosel);
-      Serial.print("rit: "); Serial.println(rit);
-      Serial.print("ritFreq: "); Serial.println(ritFreq);
-      Serial.print("vfo[VFOA]: "); Serial.println(vfo[VFOA]);
-      Serial.print("vfo[VFOB]: "); Serial.println(vfo[VFOB]);
-      Serial.println(); Serial.println();
+      // debug only to display some state variables
+      traceLog("menumode: %i\n", menumode);
+      traceLog("mode: %i\n", mode);
+      traceLog("filt: %i\n", filt);
+      traceLog("stepsize: %i\n", stepsize);
+      traceLog("vfosel: %i\n", vfosel);
+      traceLog("rit: %i\n", rit);
+      traceLog("ritFreq: %i\n", ritFreq);
+      traceLog("vfo[VFOA]: %i\n", vfo[VFOA]);
+      traceLog("vfo[VFOB]: %i\n\n\n", vfo[VFOB]);
     }
   }
 }
