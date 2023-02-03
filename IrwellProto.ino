@@ -1,16 +1,29 @@
 ///////////////////////////////////////////////////////////////////////////////////
-//   G6LBQ Irwell HF Transceiver VFO - Version 1.0
-//   stm32 + si5351a VFO With BFO & Conversion Oscilator
+//  G6LBQ Irwell HF Transceiver VFO - Version 1.0
+//  stm32 + si5351a VFO With BFO & Conversion Oscilator
 //   
-//   Expanded with Multiple SI5351 & I/O Expanders by G6LBQ  
+//  Expanded with Multiple SI5351 & I/O Expanders by G6LBQ  
 //
-//   Created by G6LBQ on 15/09/2020 
+//  Created by G6LBQ on 15/09/2020 
+//
+//  RGB colours used for the display - Added by G6LBQ
+//
+//  255-0-0     Red
+//  0-0-0       Black
+//  255-255-0   Yellow
+//  255-255-255 White
+//  0-255-0     Green
+//  50-50-50    Dark Grey
+//  100-100-100 Grey
+//  235-0-200   Pink
+//  0-255-255   Turquoise
+//  0-0-255     Blue
 ///////////////////////////////////////////////////////////////////////////////////
 
 //#define REQUIRESERIALCONNECTED    // uncomment to stall on startup until usb serial is connected
-#define MOCKI2C     // uncomment this to mock transmission to the 2x pcf8574 , Si5351s
+//#define MOCKI2C     // uncomment this to mock transmission to the 2x pcf8574 , Si5351s
 
-//#define OPTICAL_ENCODER         // uncomment this line for an optical encoder
+#define OPTICAL_ENCODER         // uncomment this line for an optical encoder
 #ifdef OPTICAL_ENCODER
 #define ROTARY_LOW_SENSITIVITY 10   // encoder sensitivity for menu operations.
 #define ROTARY_HIGH_SENSITIVITY 4   // encoder sensitivity for VFO.
@@ -69,9 +82,9 @@ void debugPrintf(const char * format, ...) {
 
 //----------   TFT setting  ------------------- 
 
-#define   __CS    PB10                    // G6LBQ changed from PB10 to PB3 to free up PB10 for 2nd I2C bus    
-#define   __DC    PB0                     // D/C
-#define   __RST   PB1                     // RESET   
+#define   __CS    PB10                        
+#define   __DC    PB0                     
+#define   __RST   PB1                        
 
 #include "CacheDisplay.h"
 Display ucg(__DC, __CS, __RST);
@@ -79,8 +92,8 @@ Display ucg(__DC, __CS, __RST);
 //----------  Button Setting -----------------
 
 // define event names for the key events
-typedef enum {EVT_NOCHANGE, EVT_PA0_BTNUP, EVT_PA0_LONGPRESS, EVT_PA1_BTNUP, EVT_PA1_LONGPRESS, EVT_PA4_BTNUP, EVT_PA4_LONGPRESS, EVT_PC14_BTNUP, 
-              EVT_PC14_LONGPRESS, EVT_PC15_BTNUP, EVT_PC15_LONGPRESS, EVT_PA2_BTNUP, EVT_PA2_LONGPRESS } keyEvents;
+typedef enum {EVT_NOCHANGE, EVT_PA0_BTNUP, EVT_PA0_LONGPRESS, EVT_PA1_BTNUP, EVT_PA1_LONGPRESS, EVT_PC14_BTNUP, EVT_PC14_LONGPRESS, EVT_PC15_BTNUP, EVT_PC15_LONGPRESS, 
+EVT_PB11_BTNUP, EVT_PB11_LONGPRESS, EVT_PB3_BTNUP, EVT_PB3_LONGPRESS ,EVT_PB4_BTNUP, EVT_PB4_LONGPRESS , EVT_PB5_BTNUP, EVT_PB5_LONGPRESS } keyEvents;
 
 ButtonEvents b = ButtonEvents(EVT_NOCHANGE);
 
@@ -91,20 +104,21 @@ ButtonEvents b = ButtonEvents(EVT_NOCHANGE);
 #define   OUT_CW       PA9                // G6LBQ added extra mode selection output                  
 #define   OUT_AM       PA10               // G6LBQ added extra mode selection output
 #define   OUT_FM       PB14               // G6LBQ changed from PA11 to PB14
-#define   SW_BAND      PA0
-#define   SW_STEP      PA1
-#define   SW_TX        PB11               // G6LBQ changed for hardware compatibility               
-#define   SW_MODE      PC14                 
-#define   SW_RIT       PC15
-#define   SW_PA4       PA4                // demonstrate adding a new button. (Terrible naming)
-#define   SW_ATTEN     PA6
+#define   SW_BAND      PA1                // G6LBQ 29/11/2022 changed from PA0 to PA1
+#define   SW_STEP      PC15               // G6LBQ 29/11/2022 changed from PA1 to PC15
+#define   SW_TX        PB8                // G6LBQ 29/11/2022 changed from PB11 to PB8               
+#define   SW_MODE      PA0                // G6LBQ 29/11/2022 changed from PC14 to PA0  
+#define   SW_MENUON    PB4                // G6LBQ 29/11/2022 changed from PC15 to PB4
+#define   SW_VFO       PC14               // G6LBQ 08/12/2022 changed from PA4  to PC14
+#define   SW_ATTEN     PB11               // G6LBQ 29/11/2022 changed from PA2 to PB11
+#define   SW_RFPRE     PB5                // G6LBQ 29/11/2022 added button to control RF Preamplifier
+#define   SW_FILT      PB3                // G6LBQ 29/11/2022 added button to control DSP noise reduction
 
 #define   OUT_ATT0     PA2
 #define   OUT_ATT1     PA3
-#define   OUT_ATT2     PB3
+#define   OUT_ATT2     PA6
 
-//#define   SW_MODE      PB7                 
-//#define   SW_RIT       PA0
+#define   OUT_RFPRE    PB9                // G6LBQ 29/11/2022 added control out for RF Preamplifier               
 
 #define   LED          PC13
 
@@ -139,9 +153,10 @@ enum vfo_t { VFOA=0, VFOB=1, SPLIT=2 };
 
 int16_t  mode = MODE_USB;
 int16_t  atten = 0;
+int16_t  rfpre = 0;     //G6LBQ 29/11/2022 added for RF PreAmp
 int16_t  filt = 0;
 int16_t  bandval = 3;
-int16_t  stepsize = 3;  //todo revisit - uSDX uses an enum
+int16_t  stepsize = 3;  
 uint16_t vfosel = VFOA;
 int16_t  rit = 0;
 int16_t  ritFreq = 0;
@@ -151,7 +166,7 @@ int32_t  vfo[] = { 7074000, 14074000 };
 uint32_t firstIF = 45000000;
 uint16_t eeprom_version;
 
-#define get_version_id() 8
+#define get_version_id() 1
 
 // end of state variables stored in eeprom
 
@@ -180,8 +195,8 @@ int8_t  menu = 1;  // current parameter id selected in menu
 
 
 enum action_t { UPDATE, UPDATE_MENU, NEXT_MENU, LOAD, SAVE, SKIP, NEXT_CH };
-enum params_t {NULL_, MODE, FILTER, BAND, STEP, VFOSEL, RIT, RITFREQ, ATTEN, SIFXTAL, IF_LSB, IF_USB, IF_CW, IF_AM, IF_FM, FIRSTIF, FREQA, FREQB, VERS, ALL=0xff};
-#define N_PARAMS 15                // number of (visible) parameters
+enum params_t {NULL_, MODE, FILTER, BAND, STEP, VFOSEL, RIT, RITFREQ, ATTEN, RFPRE, SIFXTAL, IF_LSB, IF_USB, IF_CW, IF_AM, IF_FM, FIRSTIF, FREQA, FREQB, VERS, ALL=0xff};   // G6LBQ 29/11/2022 added RFPRE
+#define N_PARAMS 16                // number of (visible) parameters    // G6LBQ 29/11/2022 increased Params from 15 to 16 so RFPRE is included
 #define N_ALL_PARAMS (N_PARAMS+3)  // total of all parameters
 
 
@@ -281,7 +296,7 @@ void select_BPF(uint32_t freq) {
 //--------- Low Pass Filter Bank Selection ---------------------------------
 
 #define LPF_PCF_ADDR 0x3a
-#define MOCK_LPF
+//#define MOCK_LPF
 
 // Duplicate of write_PCF8574, but is added to allow this I2C interface to be 
 // easily mocked out independently of the other I2C interfaces.
@@ -323,10 +338,60 @@ void select_LPF(uint32_t freq) {
   }
 }
 
+//--------- DSP Filter Bank Selection ---------------------------------
+//--------- Added by G6LBQ 10/12/2022 ---------------------------------
+#define DSP_PCF_ADDR 0x3b
+//#define MOCK_DSP
+
+void write_DSP_PCF8574(uint8_t address, uint8_t data) {
+#ifndef MOCK_DSP
+  Wire.begin();
+  Wire.beginTransmission(address);
+  Wire.write(data);
+  Wire.endTransmission();
+#endif
+
+  traceI2C("write_DSP_PCF8574 to 0x%.2x: 0x%.2x", address, data);
+}
+
+void init_DSP() {
+  write_DSP_PCF8574(DSP_PCF_ADDR, 0b11111111);  //initialize PCF8574 I/O expander for DSP filters
+}
+
+void select_DSPbank(int8_t bank) {
+  static int8_t currentBank = -1;
+  if (bank == currentBank)
+    // the correct bank is already selected; nothing to do here
+    return;
+  write_DSP_PCF8574(DSP_PCF_ADDR, bank);
+  currentBank = bank;
+}
+
+void select_DSP(uint32_t filt) {
+
+  // DSP Filter selection logic.
+  // BHI Module N2=Bit3 N1=Bit2 N0=Bit1
+  // BHI Module DSP enable/disable = Bit4
+  if        (filt ==0){ select_DSPbank(0b11110111);   // DSP filter is off
+  } else if (filt ==1){ select_DSPbank(0b11111000);   // Level 1
+  } else if (filt ==2){ select_DSPbank(0b11111001);   // Level 2
+  } else if (filt ==3){ select_DSPbank(0b11111010);   // Level 3
+  } else if (filt ==4){ select_DSPbank(0b11111011);   // Level 4
+  } else if (filt ==5){ select_DSPbank(0b11111100);   // Level 5
+  } else if (filt ==6){ select_DSPbank(0b11111101);   // Level 6
+  } else if (filt ==7){ select_DSPbank(0b11111110);   // Level 7
+  } else if (filt ==8){ select_DSPbank(0b11111111);   // Level 8 - DSP filter is on full
+  }
+}
+
 void select_Attenuator(uint16_t atten) {
   digitalWrite(OUT_ATT0, atten==1);
   digitalWrite(OUT_ATT1, atten==2);
   digitalWrite(OUT_ATT2, atten==3);
+}
+
+void select_RFPreamplifier(uint16_t rfpre) {    // G6LBQ 29/11/2022 added for RF PreAmplifier
+  digitalWrite(OUT_RFPRE, rfpre==1);
 }
 
 // -----     Routine to interface to the TCA9548A -----
@@ -415,9 +480,9 @@ void eeprom_write_block(const void *__src, void *__dst, size_t __n) {
 // -----------menu system labels ----------------------------------
 
 const char* mode_label[]       = { "LSB", "USB", "CW ", "AM ", "FM " };
-const char* filt_label[]       = { "Full", "7", "6", "5", "4", "3", "2", "1" };
+const char* filt_label[]       = { "OFF ", " 1  ", " 2  ", " 3  ", " 4  ", " 5  ", " 6  ", " 7  ", "FULL" };
 
-// Band information - last 4 are made up. TODO - provide proper values
+// Band information
 const char* band_label[]       = {  "160m",    "80m",    "60m",    "40m",    "30m",    "20m",     "17m",     "15m",    "12m",     "10m",   "MW" };
 const uint8_t bandMode[]       = { MODE_LSB, MODE_LSB,  MODE_LSB, MODE_LSB,  MODE_CW, MODE_USB,  MODE_USB,  MODE_USB, MODE_USB, MODE_USB, MODE_AM };
 const uint32_t bandFreq[]      = {  1900000,  3700000,   5460000,  7100000, 10100000, 14100000,  18100000,  21250000, 24925000, 28250000, 1458000 };
@@ -426,40 +491,82 @@ const char* stepsize_label[]   = { "1Hz   ", "10Hz  ", "100Hz ", "1KHz  ", "10KH
 const char* vfosel_label[]     = { "VFO A", "VFO B"/*, "Split"*/ };
 const char* offon_label[]      = {"OFF", "ON"};
 const char* atten_label[]      = {"OFF ", "6dB ", "12dB", "18dB"};
+const char* rfpre_label[]      = {"OFF ", "ON "};
 
 
 //------------- display subsystem  --------------------------------
 
 // Ideally only use these fonts which I've tested. Font must be monospace
-#define fontTiny   ucg_font_9x15_mr
-#define fontMedium ucg_font_inb16_mr
-#define fontLarge  ucg_font_inb24_mr
-#define fontHuge   ucg_font_inb33_mn    // just numbers to save flash
+#define fontTiny    ucg_font_9x15_mr
+#define fontSmaller ucg_font_10x20_mr
+#define fontSmall   ucg_font_profont17_mr
+#define fontSmall4  ucg_font_courB14_mr
+#define fontSmall5  ucg_font_courR10_mr
+#define fontMedium  ucg_font_inb16_mr
+#define fontLarge   ucg_font_inb24_mr
+#define fontLarger  ucg_font_inr33_mr
+#define fontHuge    ucg_font_inb33_mn    
 
 void paintBackground() {
   // paint any borders, colour fills, unchanging text to make it attractive
 
   // paint a border around the main frequency display
+  ucg.setColor(255, 165, 0);
+  ucg.drawRBox(1,1,314,55,5);
   ucg.setColor(255,255,255);
   ucg.drawRFrame(1,1,314,55,5);
   ucg.drawRFrame(2,2,312,53,5);
-
+  ucg.setColor(47, 47, 47);
+  ucg.drawRFrame(3,3,310,51,5);
+  
   // paint a border around the secondary frequency display
+  ucg.setColor(178, 34, 34);
+  ucg.drawRBox(1, 60, 314, 40, 5);
+  ucg.setColor(255, 255, 255);
+  ucg.drawRFrame(1, 60, 314, 40, 5);
+  ucg.drawRFrame(2, 61, 312, 38, 5);
+
+  // paint a border around the Mode
+  ucg.setColor(250, 0, 0);
+  ucg.drawRBox(1, 119, 93, 26, 5);
   ucg.setColor(255,255,255);
-  ucg.drawRFrame(1,60,314,40,5);
-  ucg.drawRFrame(2,61,312,38,5);
+  ucg.drawRFrame(1, 119, 93, 26, 5);
+
+  // paint a border around the Attn
+  ucg.setColor(0, 0, 205);
+  ucg.drawRBox(1, 150, 93, 26, 5);
+  ucg.setColor(255, 255, 255);
+  ucg.drawRFrame(1, 150, 93, 26, 5);
+
+  // paint a border around the Filter
+  ucg.setColor(72, 61, 139);
+  ucg.drawRBox(99, 150, 93, 26, 5);
+  ucg.setColor(255,255,255);
+  ucg.drawRFrame(99, 150, 93, 26, 5);
+  
+  // paint a border around the RF Pre-Amplifier
+  ucg.setColor(0, 139, 139);
+  ucg.drawRBox(99, 119, 93, 26, 5);
+  ucg.setColor(255,255,255);
+  ucg.drawRFrame(99, 119, 93, 26, 5);
 
   // paint a border around the Step size
-  ucg.drawRFrame(210, 102, 102, 26, 5);
+  ucg.setColor(254, 140, 0);
+  ucg.drawRBox(198, 119, 116, 26, 5);
+  ucg.setColor(255,255,255);
+  ucg.drawRFrame(198, 119, 116, 26, 5);
 
   // paint a border around the RIT offset
-  ucg.drawRFrame(210, 130, 102, 26, 5);
-  
-  // paint id along the bottom
+  ucg.setColor(0, 0, 0);
+  ucg.drawRBox(198, 150, 116, 26, 5);
+  ucg.setColor(255,255,255);
+  ucg.drawRFrame(198, 150, 116, 26, 5);
+
+  // paint id
   ucg.setFont(fontTiny);
-  ucg.setPrintPos(30,230);
+  ucg.setPrintPos(10,115);
   ucg.setColor(235,0,200);
-  ucg.print( "G6LBQ Irwell HF Transceiver");
+  ucg.print( "---G6LBQ Irwell HF Transceiver---");
 }
 
 void printFreq(uint32_t freq) {
@@ -472,44 +579,59 @@ void printFreq(uint32_t freq) {
 
 void updateScreen() {
   char buff[20];
-  // printPrimaryVFO
-  ucg.setPrintPos( 12, 44); ucg.setFont(fontHuge);  ucg.setColor(0, 255, 255); printFreq(vfo[vfosel]);
-  ucg.setPrintPos(278, 40); ucg.setFont(fontLarge); ucg.setColor(255, 0, 0);   ucg.print(vfosel ? "B" : "A");
+ // printPrimaryVFO
+  ucg.setPrintPos( 12, 44); ucg.setColor(1, 255, 165, 0); ucg.setFont(fontHuge);  ucg.setColor(79, 79, 79); printFreq(vfo[vfosel]);
+  ucg.setPrintPos(278, 40); ucg.setColor(1, 255, 165, 0); ucg.setFont(fontLarge); ucg.setColor(255, 255, 0);   ucg.print(vfosel ? "B" : "A");
     
   // printSecondaryVFO
-  ucg.setPrintPos(  26,  91); ucg.setFont(ucg_font_inb24_mr); ucg.setColor(0, 255, 255); printFreq(vfo[vfosel^1]);
-  ucg.setPrintPos( 278,  91); ucg.setFont(ucg_font_inb24_mr); ucg.setColor(255, 0, 0);   ucg.print(vfosel^1 ? "B" : "A");
+  ucg.setPrintPos(  26,  91); ucg.setColor(1, 178, 34, 34); ucg.setFont(ucg_font_inb24_mr); ucg.setColor(255, 0, 0); printFreq(vfo[vfosel^1]);
+  ucg.setPrintPos( 278,  91); ucg.setColor(1, 178, 34, 34); ucg.setFont(ucg_font_inb24_mr); ucg.setColor(255, 145, 0); ucg.print(vfosel^1 ? "B" : "A");
     
   // printMode
-  ucg.setFont(fontMedium);
-  ucg.setPrintPos(  0, 122); ucg.setColor(0, 255, 0, 0); ucg.setColor(1, 255, 255, 255); ucg.print("Mode"); 
-  ucg.setPrintPos( 65, 122); ucg.setColor(1, 0, 0, 0);   ucg.setColor(0, 255, 255);      ucg.print(mode_label[mode]); 
-    
-  // printStep
-  ucg.setPrintPos( 130, 122); ucg.setFont(fontMedium); ucg.setColor(255, 0, 0); ucg.print("Step");
-  ucg.setPrintPos( 216, 122); ucg.setColor(255, 255, 255); ucg.print(stepsize_label[stepsize]);
-    
-  // printRIT
-  ucg.setPrintPos( 130, 150); ucg.setFont(fontMedium); ucg.setColor(255, 0, 0); ucg.print("RIT"); ucg.print(rit?"+":"-");
-  //ucg.setPrintPos( 144, 176); ucg.print(offon_label[rit]); ucg.print("  ");
-  sprintf(buff,"%-+5i", ritFreq);
-  ucg.setPrintPos( 216, 150); ucg.setColor(255, 255, 255); ucg.print(buff);
+  ucg.setPrintPos( 7, 138); ucg.setFont(fontSmaller); ucg.setColor(0, 255, 255, 255); ucg.setColor(1, 250, 0, 0); ucg.print("Mode"); 
+  ucg.setPrintPos( 53, 138); ucg.setColor(1, 250, 0, 0);  ucg.setColor(255, 255, 0); ucg.print(mode_label[mode]);
 
   // print attentuator setting
-  ucg.setPrintPos( 0, 150); ucg.setFont(fontMedium); ucg.setColor(255, 0, 0); ucg.print("Att");
-  ucg.setPrintPos(50, 150); ucg.setColor(1, 0, 0, 0); ucg.setColor(0, 255, 255); ucg.print(atten_label[atten]);
+  ucg.setPrintPos( 7, 169); ucg.setFont(fontSmaller); ucg.setColor(0, 255, 255, 255); ucg.setColor(1, 0, 0, 205); ucg.print("Attn");
+  ucg.setPrintPos( 53, 169); ucg.setColor(1, 0, 0, 205); ucg.setColor(255, 255, 0); ucg.print(atten_label[atten]);
+
+  // print DSP filter setting
+  ucg.setPrintPos( 105, 169); ucg.setFont(fontSmaller); ucg.setColor(0, 255, 255, 255); ucg.setColor(1, 72, 61, 139); ucg.print("DspF");
+  ucg.setPrintPos( 151, 169); ucg.setColor(1, 72, 61, 139); ucg.setColor(255, 255, 0); ucg.print(filt_label[filt]);
+
+  // print RF Premaplifier setting
+  ucg.setPrintPos( 105, 138); ucg.setFont(fontSmaller); ucg.setColor(0, 255, 255, 255); ucg.setColor(1, 0, 139, 139); ucg.print("PreA");
+  ucg.setPrintPos( 151, 138); ucg.setColor(1, 0, 139, 139); ucg.setColor(255, 255, 0); ucg.print(rfpre_label[rfpre]);
+    
+  // printStep
+  ucg.setPrintPos( 204, 138); ucg.setFont(fontSmaller); ucg.setColor(0, 255, 255, 255); ucg.setColor(1, 254, 140, 0); ucg.print("Step");
+  ucg.setPrintPos( 249, 138); ucg.setColor(1,254, 140, 0);  ucg.setColor(255, 255, 0); ucg.print(stepsize_label[stepsize]);
+    
+  // printRIT
+  ucg.setPrintPos( 204, 169); ucg.setFont(fontSmaller); ucg.setColor(0, 255, 255, 255); ucg.setColor(1, 0, 0, 0); ucg.print("RIT"); ucg.print(rit?"+":"-");
+  //ucg.setPrintPos( 144, 176); ucg.print(offon_label[rit]); ucg.print("  ");
+  sprintf(buff,"%-+5i", ritFreq);
+  ucg.setPrintPos( 249, 169); ucg.setColor(1, 0, 0, 0);  ucg.setColor(255, 255, 0); ucg.print(buff);
 }
 
 void printBlanks(){
-  ucg.print("        ");
+  ucg.print("          ");
 }
 
 void printTXstate(bool tx) {  // TODO - may need to rework this
-  ucg.setPrintPos( 96, 198);
+  ucg.setPrintPos( 115, 205);
   if (tx) {
-    ucg.setColor(255,0,0); ucg.print("--TX--"); ucg.setColor(255,255,255);
+    ucg.setColor(255,0,0);
+    ucg.drawRFrame(80, 187, 150, 23, 0);
+    ucg.drawRFrame(79, 186, 152, 25, 0);
+    ucg.drawRFrame(78, 185, 154, 27, 0);
+    ucg.setFont(fontSmaller); ucg.setColor(255,0,0); ucg.print("---TX---"); //ucg.setColor(255,255,255);
   } else {
-    ucg.print("      ");
+    ucg.setColor(0,0,0);
+    ucg.drawRFrame(80, 187, 150, 23, 0);
+    ucg.drawRFrame(79, 186, 152, 25, 0);
+    ucg.drawRFrame(78, 185, 154, 27, 0);
+    ucg.print("          ");
   }
 }
 
@@ -524,13 +646,15 @@ void updateModeOutputs(uint8_t mode) {
 }
 
 // change this to void updateAllFreq() when going to dual-conversion
-void updateAllFreqDualConversion() {
+//void updateAllFreqDualConversion() {
+void updateAllFreq() {
   int32_t freq = vfo[vfosel];
   int32_t finalIF = ifFreq[mode];
   int32_t freqRIT = rit ? ritFreq : 0;
   
   select_BPF(freq);
   select_LPF(freq);
+  select_DSP(filt);
   updateModeOutputs(mode);
   
   // set the VFO to put the desired input frequency at 45MHz
@@ -538,7 +662,7 @@ void updateAllFreqDualConversion() {
   // set each so that the net result is for frequency inversion to occur (to keep the 
   // rest of the radio unchanged
 
-//#define HIGHSIDEVFO
+//#define HIGHSIDEVFO                             //Uncomment for single conversion, comment out for dual conversion
 #ifdef HIGHSIDEVFO
   uint32_t vfofreq = firstIF + (freq + freqRIT);  // causes frequency inversion
   uint32_t convFreq = firstIF - finalIF;          // no frequency inversion
@@ -567,7 +691,8 @@ void updateAllFreqDualConversion() {
 }
 
 // change this to updateAllFreqHide() when going to dual-conversion
-void updateAllFreq() {
+//void updateAllFreq() {                          //Uncomment for single conversion, comment out for dual conversion  
+void updateAllFreqHide() {                      //Uncomment for dual conversion, comment out for single conversion  
   int32_t freq = vfo[vfosel];
   int32_t finalIF = ifFreq[mode];
   int32_t freqRIT = rit ? ritFreq : 0;
@@ -615,12 +740,12 @@ void triggerBandChange(int menu) {
 // Anything could have changed so calculate _everything_
 void triggerValueChange(int menu) {
   select_Attenuator(atten);
+  select_RFPreamplifier(rfpre);     // G6LBQ 29/11/2022 added for RF PreAmplifier
   updateAllFreq();
   updateScreen();
 }
 
 void triggerNoop(int menu) {}
-
 
 
 //-------------- encoder tune rate  -----------
@@ -651,14 +776,27 @@ void bandDown() {
   setEEPROMautoSave();
 }
 
+void setmodeUp() {
+  mode = (mode + 1) % _N(mode_label);
+  triggerValueChange(0);
+  setEEPROMautoSave();
+}
+
+void setmodeDown() {
+  if (mode==0) mode = _N(mode_label);
+  mode--;
+  triggerValueChange(0);
+  setEEPROMautoSave();
+}
+
 // menu system code
 
 
 void clearMenuArea(){
-  ucg.setFont(fontMedium); ucg.setColor(0, 255, 255, 255);
-  ucg.setPrintPos( 0, 176);
+  ucg.setFont(fontSmaller); ucg.setColor(0, 255, 255, 255);
+  ucg.setPrintPos( 3, 232);
   printBlanks(); printBlanks();
-  ucg.setPrintPos( 0, 198);
+  ucg.setPrintPos( 155, 232);
   printBlanks(); printBlanks();
 }
 
@@ -677,15 +815,16 @@ void printmenuid(uint8_t menuid){ // output menuid in x.y format
 }
 
 void printlabel(uint8_t action, uint8_t menuid, const char* label){
-  ucg.setFont(fontMedium); ucg.setColor(0, 255, 255, 255);
+  ucg.setFont(fontSmaller); ucg.setColor(0, 255, 255, 0);
   if(action == UPDATE_MENU){
-    ucg.setPrintPos( 0, 176);
+    ucg.setPrintPos( 3, 232);
     printmenuid(menuid);
     ucg.print(label); printBlanks(); printBlanks();
-    ucg.setPrintPos( 0, 198);// value on next line
+    ucg.setFont(fontSmaller); ucg.setColor(0, 255, 0, 0);
+    ucg.setPrintPos( 155, 232);                         
     if(menumode >= MENU_VALUE) ucg.print('>');
   } else { // UPDATE (not in menu)
-    ucg.setPrintPos( 0, 198); ucg.print(label); ucg.print(": ");
+    ucg.setPrintPos( 3, 232); ucg.print(label); ucg.print(": ");
   }
 }
 
@@ -745,21 +884,22 @@ int8_t paramAction(uint8_t action, uint8_t id = ALL) { // list of parameters
   switch(id){    
     case ALL:     for(id = 1; id != N_ALL_PARAMS+1; id++) paramAction(action, id);  // for all parameters
     // Visible parameters
-    case MODE:    paramAction(action, mode,           0x11,      "Mode",     mode_label,        0,     _N(mode_label)-1, triggerValueChange); break;
-    case FILTER:  paramAction(action, filt,           0x12, "NR Filter",     filt_label,        0,     _N(filt_label)-1, triggerValueChange); break;
-    case BAND:    paramAction(action, bandval,        0x13,      "Band",     band_label,        0,     _N(band_label)-1, triggerBandChange ); break;
-    case STEP:    paramAction(action, stepsize,       0x14, "Tune Rate", stepsize_label,        0, _N(stepsize_label)-1, triggerValueChange); break;
-    case VFOSEL:  paramAction(action, vfosel,         0x15,  "VFO Mode",   vfosel_label,        0,   _N(vfosel_label)-1, triggerValueChange); break;
-    case RIT:     paramAction(action, rit,            0x16,       "RIT",    offon_label,        0,                    1, triggerValueChange); break;
-    case RITFREQ: paramAction(action, ritFreq,        0x17,"RIT Offset",           NULL,    -1000,                 1000, triggerValueChange); break;
-    case ATTEN:   paramAction(action, atten,          0x18,     "Atten",    atten_label,        0,   _N(atten_label)-1, triggerValueChange); break;
-    case SIFXTAL: paramAction(action, xtalfreq,       0x81,  "Ref freq",           NULL, 24975000,            25025000, triggerValueChange); break;
-    case IF_LSB:  paramAction(action, ifFreq[0],      0x82,    "IF-LSB",           NULL, 8000000,             12000000, triggerValueChange); break;
-    case IF_USB:  paramAction(action, ifFreq[1],      0x83,    "IF-USB",           NULL, 8000000,             12000000, triggerValueChange); break;
-    case IF_CW:   paramAction(action, ifFreq[2],      0x84,     "IF-CW",           NULL, 8000000,             12000000, triggerValueChange); break;
-    case IF_AM:   paramAction(action, ifFreq[3],      0x85,     "IF-AM",           NULL, 8000000,             12000000, triggerValueChange); break;
-    case IF_FM:   paramAction(action, ifFreq[4],      0x86,     "IF-FM",           NULL, 8000000,             12000000, triggerValueChange); break;
-    case FIRSTIF: paramAction(action, firstIF,        0x87,  "First IF",           NULL,42000000,             48000000, triggerValueChange); break;
+    case MODE:    paramAction(action, mode,           0x11,    "Mode -----",      mode_label,        0, _N(mode_label)-1, triggerValueChange); break;
+    case FILTER:  paramAction(action, filt,           0x12,    "NR Filter -",     filt_label,       0, _N(filt_label)-1, triggerValueChange); break;
+    case BAND:    paramAction(action, bandval,        0x13,    "Band -----",      band_label,        0, _N(band_label)-1, triggerBandChange ); break;
+    case STEP:    paramAction(action, stepsize,       0x14,    "Tune Rate ",      stepsize_label,    0, _N(stepsize_label)-1, triggerValueChange); break;
+    case VFOSEL:  paramAction(action, vfosel,         0x15,    "VFO Mode -",      vfosel_label,      0, _N(vfosel_label)-1, triggerValueChange); break;
+    case RIT:     paramAction(action, rit,            0x16,    "RIT ------",      offon_label,       0, 1, triggerValueChange); break;
+    case RITFREQ: paramAction(action, ritFreq,        0x17,    "RIT Offset",      NULL,    -1000,    1000, triggerValueChange); break;
+    case ATTEN:   paramAction(action, atten,          0x18,    "Atten ----",      atten_label,       0, _N(atten_label)-1, triggerValueChange); break;
+    case RFPRE:   paramAction(action, rfpre,          0x19,    "RF Preamp ",      rfpre_label,       0, _N(rfpre_label)-1, triggerValueChange); break;    // G6LBQ 29/11/2022 added for RF PreAmplifier
+    case SIFXTAL: paramAction(action, xtalfreq,       0x81,    "RefFreq --",      NULL, 24975000,    25025000, triggerValueChange); break;
+    case IF_LSB:  paramAction(action, ifFreq[0],      0x82,    "IF-LSB ---",      NULL, 8000000,     12000000, triggerValueChange); break;
+    case IF_USB:  paramAction(action, ifFreq[1],      0x83,    "IF-USB ---",      NULL, 8000000,     12000000, triggerValueChange); break;
+    case IF_CW:   paramAction(action, ifFreq[2],      0x84,    "IF-CW ----",      NULL, 8000000,     12000000, triggerValueChange); break;
+    case IF_AM:   paramAction(action, ifFreq[3],      0x85,    "IF-AM ----",      NULL, 8000000,     12000000, triggerValueChange); break;
+    case IF_FM:   paramAction(action, ifFreq[4],      0x86,    "IF-FM ----",      NULL, 8000000,     12000000, triggerValueChange); break;
+    case FIRSTIF: paramAction(action, firstIF,        0x87,    "First-IF -",      NULL, 42000000,    48000000, triggerValueChange); break;
     
     // invisible parameters. These are here only for eeprom save/restore
     case FREQA:   paramAction(action, vfo[VFOA],         0,        NULL,           NULL,         0,                    0, triggerNoop       ); break;
@@ -816,12 +956,15 @@ void setup() {
   ucg.setRotate270();
   ucg.setColor(1, 0, 0, 0);       // set foreground color
  
-  b.add(SW_BAND, EVT_PA0_BTNUP, EVT_PA0_LONGPRESS);
-  b.add(SW_STEP, EVT_PA1_BTNUP, EVT_PA1_LONGPRESS);
-  b.add(SW_PA4,  EVT_PA4_BTNUP, EVT_PA4_LONGPRESS);
-  b.add(SW_MODE, EVT_PC14_BTNUP, EVT_PC14_LONGPRESS);
-  b.add(SW_RIT,  EVT_PC15_BTNUP, EVT_PC15_LONGPRESS);
-  b.add(SW_ATTEN,EVT_PA2_BTNUP, EVT_PA2_LONGPRESS);
+  b.add(SW_BAND, EVT_PA1_BTNUP, EVT_PA1_LONGPRESS);      // G6LBQ 29/11/2022 Changed from PA0 to PA1
+  b.add(SW_STEP, EVT_PC15_BTNUP, EVT_PC15_LONGPRESS);    // G6LBQ 29/11/2022 Changed from PA1 to PC15
+  b.add(SW_VFO,  EVT_PC14_BTNUP, EVT_PC14_LONGPRESS);    // G6LBQ 08/12/2022 Changed from PA4 to PC14  
+  b.add(SW_MODE, EVT_PA0_BTNUP, EVT_PA0_LONGPRESS);      // G6LBQ 29/11/2022 Changed from PC14 to PA0  
+  b.add(SW_MENUON, EVT_PB4_BTNUP, EVT_PB4_LONGPRESS);    // G6LBQ 29/11/2022 Changed from PC15 to PB4
+  b.add(SW_ATTEN,EVT_PB11_BTNUP, EVT_PB11_LONGPRESS);    // G6LBQ 29/11/2022 Changed from PA6 to PB11
+  b.add(SW_RFPRE,EVT_PB5_BTNUP, EVT_PB5_LONGPRESS);      // G6LBQ 29/11/2022 Added for RF PreAmplifier
+  b.add(SW_FILT,EVT_PB3_BTNUP, EVT_PB3_LONGPRESS);       // G6LBQ 29/11/2022 Added for DSP Noise Reduction
+   
   
   pinMode(LED, OUTPUT);
   pinMode(SW_TX,INPUT_PULLUP);
@@ -830,9 +973,10 @@ void setup() {
   pinMode(OUT_CW,OUTPUT);                     // CW Mode - G6LBQ added additional mode selection
   pinMode(OUT_AM,OUTPUT);                     // AM Mode - G6LBQ added additional mode selection
   pinMode(OUT_FM,OUTPUT);                     // G6LBQ added 15/08/22
-  pinMode(OUT_ATT0, OUTPUT);
-  pinMode(OUT_ATT1, OUTPUT);
-  pinMode(OUT_ATT2, OUTPUT);
+  pinMode(OUT_ATT0,OUTPUT);
+  pinMode(OUT_ATT1,OUTPUT);
+  pinMode(OUT_ATT2,OUTPUT);
+  pinMode(OUT_RFPRE,OUTPUT);                  // G6LBQ 29/11/2022 added output to control RF PreAmp
 
   init_BPF();
   init_LPF();
@@ -875,53 +1019,72 @@ void loop() {
 
   int event = b.getButtonEvent();
   switch (event) {
-     case EVT_PC15_BTNUP: // was the RIT button
+     case EVT_PB4_BTNUP: // was the RIT button
       processMenuKey();
-      break;
-      
-    case EVT_PC14_BTNUP:  // was the MODE button
-      processEnterKey();
-      break;
-      
-    case EVT_PA1_BTNUP:     // STEP button
+      break;      
+ 
+    case EVT_PC15_BTNUP:     // STEP button
       setstepDown();
       break;
-    case EVT_PA1_LONGPRESS: // STEP button
+    case EVT_PC15_LONGPRESS: // STEP button
       setstepUp();
       break;
       
-    case EVT_PA0_BTNUP:     // add back the BAND button
+    case EVT_PA1_BTNUP:     // BAND button
+      bandUp();             // G6LBQ Added 23/09/22
       break;
-    case EVT_PA0_LONGPRESS:
+    case EVT_PA1_LONGPRESS:
+      bandDown();           // G6LBQ Added 23/09/22 
       break;
       
-    case EVT_PA4_BTNUP:     // RIT on/off
-      rit = rit^1;          // toggle the bottom bit onoff
+    case EVT_PC14_BTNUP:    // VFO A/B Select
+      vfosel = vfosel^1;
+ //   rit = rit^1;          // toggle the bottom bit onoff
       triggerValueChange(0); 
       setEEPROMautoSave();
       break;
-      
-    case EVT_PA4_LONGPRESS:  // VFO toggle
+
+    case EVT_PC14_LONGPRESS: // VFO A/B Select
       vfosel = vfosel^1;
       triggerValueChange(0);
       setEEPROMautoSave();
-      break;
-      
-    case EVT_NOCHANGE:
-      break; // nothing to do
+      break;  
 
-    case EVT_PA2_BTNUP:
+    case EVT_PA0_BTNUP:      // MODE button
+      setmodeDown();
+      break;
+    case EVT_PA0_LONGPRESS:  // MODE button
+      setmodeUp();
+      break;        
+
+    case EVT_PB5_BTNUP:                        // G6LBQ 29/11/2022 added for RF PreAmp button
+      rfpre = (rfpre + 1) % _N(rfpre_label);
+      triggerValueChange(0);
+      break;
+
+   case EVT_PB5_LONGPRESS:                     // G6LBQ 29/11/2022 added for RF PreAmp button
+      rfpre = rfpre - 1;
+      if (rfpre < 0) {
+        rfpre = _N(rfpre_label) - 1;
+      }
+      triggerValueChange(0);
+      break;
+    
+    case EVT_PB11_BTNUP:                        // ATTENUATOR button
       atten = (atten + 1) % _N(atten_label);
       triggerValueChange(0);
       break;
 
-   case EVT_PA2_LONGPRESS:
+   case EVT_PB11_LONGPRESS:                     // ATTENUATOR button
       atten = atten - 1;
       if (atten < 0) {
         atten = _N(atten_label) - 1;
       }
       triggerValueChange(0);
       break;
+
+    case EVT_NOCHANGE:
+      break; // nothing to do  
   }
 
   if (menumode) {
