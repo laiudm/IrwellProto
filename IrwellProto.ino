@@ -21,7 +21,7 @@
 ///////////////////////////////////////////////////////////////////////////////////
 
 //#define REQUIRESERIALCONNECTED    // uncomment to stall on startup until usb serial is connected
-//#define MOCKI2C     // uncomment this to mock transmission to the 2x pcf8574 , Si5351s
+#define MOCKI2C     // uncomment this to mock transmission to the 2x pcf8574 , Si5351s
 
 #define OPTICAL_ENCODER         // uncomment this line for an optical encoder
 #ifdef OPTICAL_ENCODER
@@ -296,7 +296,7 @@ void select_BPF(uint32_t freq) {
 //--------- Low Pass Filter Bank Selection ---------------------------------
 
 #define LPF_PCF_ADDR 0x3a
-//#define MOCK_LPF
+#define MOCK_LPF
 
 // Duplicate of write_PCF8574, but is added to allow this I2C interface to be 
 // easily mocked out independently of the other I2C interfaces.
@@ -557,7 +557,7 @@ void paintBackground() {
   ucg.drawRFrame(198, 119, 116, 26, 5);
 
   // paint a border around the RIT offset
-  ucg.setColor(0, 0, 0);
+  ucg.setColor(255, 0, 0);
   ucg.drawRBox(198, 150, 116, 26, 5);
   ucg.setColor(255,255,255);
   ucg.drawRFrame(198, 150, 116, 26, 5);
@@ -608,10 +608,10 @@ void updateScreen() {
   ucg.setPrintPos( 249, 138); ucg.setColor(1,254, 140, 0);  ucg.setColor(255, 255, 0); ucg.print(stepsize_label[stepsize]);
     
   // printRIT
-  ucg.setPrintPos( 204, 169); ucg.setFont(fontSmaller); ucg.setColor(0, 255, 255, 255); ucg.setColor(1, 0, 0, 0); ucg.print("RIT"); ucg.print(rit?"+":"-");
+  ucg.setPrintPos( 204, 169); ucg.setFont(fontSmaller); ucg.setColor(0, 255, 255, 255); ucg.setColor(1, 255, 0, 0); ucg.print("RIT"); ucg.print(rit?"+":"-");
   //ucg.setPrintPos( 144, 176); ucg.print(offon_label[rit]); ucg.print("  ");
   sprintf(buff,"%-+5i", ritFreq);
-  ucg.setPrintPos( 249, 169); ucg.setColor(1, 0, 0, 0);  ucg.setColor(255, 255, 0); ucg.print(buff);
+  ucg.setPrintPos( 249, 169); ucg.setColor(1, 255, 0, 0);  ucg.setColor(255, 255, 0); ucg.print(buff);
 }
 
 void printBlanks(){
@@ -815,7 +815,7 @@ void printmenuid(uint8_t menuid){ // output menuid in x.y format
 }
 
 void printlabel(uint8_t action, uint8_t menuid, const char* label){
-  ucg.setFont(fontSmaller); ucg.setColor(0, 255, 255, 0);
+  ucg.setFont(fontSmaller); ucg.setColor(0, 255, 255, 0); ucg.setColor(1, 0, 0, 0);
   if(action == UPDATE_MENU){
     ucg.setPrintPos( 3, 232);
     printmenuid(menuid);
@@ -889,7 +889,7 @@ int8_t paramAction(uint8_t action, uint8_t id = ALL) { // list of parameters
     case BAND:    paramAction(action, bandval,        0x13,    "Band -----",      band_label,        0, _N(band_label)-1, triggerBandChange ); break;
     case STEP:    paramAction(action, stepsize,       0x14,    "Tune Rate ",      stepsize_label,    0, _N(stepsize_label)-1, triggerValueChange); break;
     case VFOSEL:  paramAction(action, vfosel,         0x15,    "VFO Mode -",      vfosel_label,      0, _N(vfosel_label)-1, triggerValueChange); break;
-    case RIT:     paramAction(action, rit,            0x16,    "RIT ------",      offon_label,       0, 1, triggerValueChange); break;
+    case RIT:     paramAction(action, rit,            0x16,    "RIT ------",      offon_label,       0, _N(offon_label)-1, triggerValueChange); break;
     case RITFREQ: paramAction(action, ritFreq,        0x17,    "RIT Offset",      NULL,    -1000,    1000, triggerValueChange); break;
     case ATTEN:   paramAction(action, atten,          0x18,    "Atten ----",      atten_label,       0, _N(atten_label)-1, triggerValueChange); break;
     case RFPRE:   paramAction(action, rfpre,          0x19,    "RF Preamp ",      rfpre_label,       0, _N(rfpre_label)-1, triggerValueChange); break;    // G6LBQ 29/11/2022 added for RF PreAmplifier
@@ -1019,6 +1019,10 @@ void loop() {
 
   int event = b.getButtonEvent();
   switch (event) {
+     case EVT_PB3_BTNUP:
+       traceLog("PB3_BTNUP\n", 0);
+       break;
+       
      case EVT_PB4_BTNUP: // was the RIT button
       processMenuKey();
       break;      
