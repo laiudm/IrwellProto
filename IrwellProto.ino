@@ -793,7 +793,7 @@ void setmodeDown() {
 
 
 void clearMenuArea(){
-  ucg.setFont(fontSmaller); ucg.setColor(0, 255, 255, 255);
+  ucg.setFont(fontSmaller); ucg.setColor(0, 255, 255, 255); ucg.setColor(1, 0, 0, 0);
   ucg.setPrintPos( 3, 232);
   printBlanks(); printBlanks();
   ucg.setPrintPos( 155, 232);
