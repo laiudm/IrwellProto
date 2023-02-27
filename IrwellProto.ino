@@ -1021,6 +1021,16 @@ void loop() {
   switch (event) {
      case EVT_PB3_BTNUP:
        traceLog("PB3_BTNUP\n", 0);
+       // implement a shortcut to go straight to the RITFREQ menu
+       
+       if (!menumode) { // radio is in normal operation; treat button input as a shortcut to the RITFREQ menu
+         menu = RITFREQ;
+         processMenuKey();  // simulate a "menu" button presss
+         processMenuKey();  // and again to get to the "update" menu
+       } else {
+        // already in the menu system so simulate a single "menu" button press to exit the menu
+        processMenuKey();
+       }
        break;
        
      case EVT_PB4_BTNUP: // was the RIT button
