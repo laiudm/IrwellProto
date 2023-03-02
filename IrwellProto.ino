@@ -1032,8 +1032,16 @@ void loop() {
         processMenuKey();
        }
        break;
+
+     case EVT_PB3_LONGPRESS:  // set the RIT offset freq back to 0, and maybe turning RIT on/off as well.
+      ritFreq = 0;
+      rit ^= 1;               // turn RIT on/off as well. Comment out or delete if not needed
+      triggerValueChange(0);  // update all calculations
+      setEEPROMautoSave();    // ensure eeprom is updated
+      break;
+      
        
-     case EVT_PB4_BTNUP: // was the RIT button
+     case EVT_PB4_BTNUP: // menu button
       processMenuKey();
       break;      
  
