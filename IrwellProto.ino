@@ -21,7 +21,7 @@
 ///////////////////////////////////////////////////////////////////////////////////
 
 //#define REQUIRESERIALCONNECTED    // uncomment to stall on startup until usb serial is connected
-#define MOCKI2C     // uncomment this to mock transmission to the 2x pcf8574 , Si5351s
+//#define MOCKI2C     // uncomment this to mock transmission to the 2x pcf8574 , Si5351s
 
 #define OPTICAL_ENCODER         // uncomment this line for an optical encoder
 #ifdef OPTICAL_ENCODER
@@ -93,7 +93,7 @@ Display ucg(__DC, __CS, __RST);
 
 // define event names for the key events
 typedef enum {EVT_NOCHANGE, EVT_PA0_BTNUP, EVT_PA0_LONGPRESS, EVT_PA1_BTNUP, EVT_PA1_LONGPRESS, EVT_PC14_BTNUP, EVT_PC14_LONGPRESS, EVT_PC15_BTNUP, EVT_PC15_LONGPRESS, 
-EVT_PB11_BTNUP, EVT_PB11_LONGPRESS, EVT_PB3_BTNUP, EVT_PB3_LONGPRESS ,EVT_PB4_BTNUP, EVT_PB4_LONGPRESS , EVT_PB5_BTNUP, EVT_PB5_LONGPRESS } keyEvents;
+EVT_PB11_BTNUP, EVT_PB11_LONGPRESS, EVT_PA15_BTNUP, EVT_PA15_LONGPRESS, EVT_PA4_BTNUP, EVT_PA4_LONGPRESS, EVT_PB4_BTNUP, EVT_PB4_LONGPRESS , EVT_PB5_BTNUP, EVT_PB5_LONGPRESS } keyEvents;
 
 ButtonEvents b = ButtonEvents(EVT_NOCHANGE);
 
@@ -112,7 +112,8 @@ ButtonEvents b = ButtonEvents(EVT_NOCHANGE);
 #define   SW_VFO       PC14               // G6LBQ 08/12/2022 changed from PA4  to PC14
 #define   SW_ATTEN     PB11               // G6LBQ 29/11/2022 changed from PA2 to PB11
 #define   SW_RFPRE     PB5                // G6LBQ 29/11/2022 added button to control RF Preamplifier
-#define   SW_FILT      PB3                // G6LBQ 29/11/2022 added button to control DSP noise reduction
+#define   SW_RIT       PA15               // G6LBQ 29/11/2022 added button to control RIT
+#define   SW_FILT      PA4                // G6LBQ 29/11/2022 added button to control DSP Filter
 
 #define   OUT_ATT0     PA2
 #define   OUT_ATT1     PA3
@@ -296,7 +297,7 @@ void select_BPF(uint32_t freq) {
 //--------- Low Pass Filter Bank Selection ---------------------------------
 
 #define LPF_PCF_ADDR 0x3a
-#define MOCK_LPF
+//#define MOCK_LPF
 
 // Duplicate of write_PCF8574, but is added to allow this I2C interface to be 
 // easily mocked out independently of the other I2C interfaces.
@@ -511,7 +512,7 @@ void paintBackground() {
   // paint any borders, colour fills, unchanging text to make it attractive
 
   // paint a border around the main frequency display
-  ucg.setColor(255, 165, 0);
+  ucg.setColor(255, 255, 0);
   ucg.drawRBox(1,1,314,55,5);
   ucg.setColor(255,255,255);
   ucg.drawRFrame(1,1,314,55,5);
@@ -520,44 +521,44 @@ void paintBackground() {
   ucg.drawRFrame(3,3,310,51,5);
   
   // paint a border around the secondary frequency display
-  ucg.setColor(178, 34, 34);
+  ucg.setColor(0, 0, 120);
   ucg.drawRBox(1, 60, 314, 40, 5);
   ucg.setColor(255, 255, 255);
   ucg.drawRFrame(1, 60, 314, 40, 5);
   ucg.drawRFrame(2, 61, 312, 38, 5);
 
   // paint a border around the Mode
-  ucg.setColor(250, 0, 0);
+  ucg.setColor(0, 0, 120);
   ucg.drawRBox(1, 119, 93, 26, 5);
   ucg.setColor(255,255,255);
   ucg.drawRFrame(1, 119, 93, 26, 5);
 
   // paint a border around the Attn
-  ucg.setColor(0, 0, 205);
+  ucg.setColor(0,185,185);
   ucg.drawRBox(1, 150, 93, 26, 5);
   ucg.setColor(255, 255, 255);
   ucg.drawRFrame(1, 150, 93, 26, 5);
 
   // paint a border around the Filter
-  ucg.setColor(72, 61, 139);
+  ucg.setColor(0,185,185);
   ucg.drawRBox(99, 150, 93, 26, 5);
   ucg.setColor(255,255,255);
   ucg.drawRFrame(99, 150, 93, 26, 5);
   
   // paint a border around the RF Pre-Amplifier
-  ucg.setColor(0, 139, 139);
+  ucg.setColor(0, 0, 120);
   ucg.drawRBox(99, 119, 93, 26, 5);
   ucg.setColor(255,255,255);
   ucg.drawRFrame(99, 119, 93, 26, 5);
 
   // paint a border around the Step size
-  ucg.setColor(254, 140, 0);
+  ucg.setColor(0, 0, 120);
   ucg.drawRBox(198, 119, 116, 26, 5);
   ucg.setColor(255,255,255);
   ucg.drawRFrame(198, 119, 116, 26, 5);
 
   // paint a border around the RIT offset
-  ucg.setColor(255, 0, 0);
+  ucg.setColor(0,185,185);
   ucg.drawRBox(198, 150, 116, 26, 5);
   ucg.setColor(255,255,255);
   ucg.drawRFrame(198, 150, 116, 26, 5);
@@ -565,7 +566,7 @@ void paintBackground() {
   // paint id
   ucg.setFont(fontTiny);
   ucg.setPrintPos(10,115);
-  ucg.setColor(235,0,200);
+  ucg.setColor(169,169,169);
   ucg.print( "---G6LBQ Irwell HF Transceiver---");
 }
 
@@ -580,38 +581,38 @@ void printFreq(uint32_t freq) {
 void updateScreen() {
   char buff[20];
  // printPrimaryVFO
-  ucg.setPrintPos( 12, 44); ucg.setColor(1, 255, 165, 0); ucg.setFont(fontHuge);  ucg.setColor(79, 79, 79); printFreq(vfo[vfosel]);
-  ucg.setPrintPos(278, 40); ucg.setColor(1, 255, 165, 0); ucg.setFont(fontLarge); ucg.setColor(255, 255, 0);   ucg.print(vfosel ? "B" : "A");
+  ucg.setPrintPos( 12, 44); ucg.setColor(1, 255, 255, 0); ucg.setFont(fontHuge);  ucg.setColor(47, 79, 79); printFreq(vfo[vfosel]);
+  ucg.setPrintPos(278, 40); ucg.setColor(1, 255, 255, 0); ucg.setFont(fontLarge); ucg.setColor(255, 0, 0);   ucg.print(vfosel ? "B" : "A");
     
   // printSecondaryVFO
-  ucg.setPrintPos(  26,  91); ucg.setColor(1, 178, 34, 34); ucg.setFont(ucg_font_inb24_mr); ucg.setColor(255, 0, 0); printFreq(vfo[vfosel^1]);
-  ucg.setPrintPos( 278,  91); ucg.setColor(1, 178, 34, 34); ucg.setFont(ucg_font_inb24_mr); ucg.setColor(255, 145, 0); ucg.print(vfosel^1 ? "B" : "A");
+  ucg.setPrintPos(  26,  91); ucg.setColor(1, 0, 0, 120); ucg.setFont(ucg_font_inb24_mr); ucg.setColor(140, 140, 140); printFreq(vfo[vfosel^1]);
+  ucg.setPrintPos( 278,  91); ucg.setColor(1, 0, 0, 120); ucg.setFont(ucg_font_inb24_mr); ucg.setColor(185, 0, 0); ucg.print(vfosel^1 ? "B" : "A");
     
   // printMode
-  ucg.setPrintPos( 7, 138); ucg.setFont(fontSmaller); ucg.setColor(0, 255, 255, 255); ucg.setColor(1, 250, 0, 0); ucg.print("Mode"); 
-  ucg.setPrintPos( 53, 138); ucg.setColor(1, 250, 0, 0);  ucg.setColor(255, 255, 0); ucg.print(mode_label[mode]);
+  ucg.setPrintPos( 7, 138); ucg.setFont(fontSmaller); ucg.setColor(0, 255, 255, 255); ucg.setColor(1, 0, 0, 120); ucg.print("Mode"); 
+  ucg.setPrintPos( 53, 138); ucg.setColor(1, 0, 0, 120);  ucg.setColor(255, 255, 0); ucg.print(mode_label[mode]);
 
   // print attentuator setting
-  ucg.setPrintPos( 7, 169); ucg.setFont(fontSmaller); ucg.setColor(0, 255, 255, 255); ucg.setColor(1, 0, 0, 205); ucg.print("Attn");
-  ucg.setPrintPos( 53, 169); ucg.setColor(1, 0, 0, 205); ucg.setColor(255, 255, 0); ucg.print(atten_label[atten]);
+  ucg.setPrintPos( 7, 169); ucg.setFont(fontSmaller); ucg.setColor(0, 255, 255, 255); ucg.setColor(1, 0,185,185); ucg.print("Attn");
+  ucg.setPrintPos( 53, 169); ucg.setColor(1, 0,185,185); ucg.setColor(0, 0, 0); ucg.print(atten_label[atten]);
 
   // print DSP filter setting
-  ucg.setPrintPos( 105, 169); ucg.setFont(fontSmaller); ucg.setColor(0, 255, 255, 255); ucg.setColor(1, 72, 61, 139); ucg.print("DspF");
-  ucg.setPrintPos( 151, 169); ucg.setColor(1, 72, 61, 139); ucg.setColor(255, 255, 0); ucg.print(filt_label[filt]);
+  ucg.setPrintPos( 105, 169); ucg.setFont(fontSmaller); ucg.setColor(0, 255, 255, 255); ucg.setColor(1, 0,185,185); ucg.print("DspF");
+  ucg.setPrintPos( 151, 169); ucg.setColor(1, 0,185,185); ucg.setColor(0, 0, 0); ucg.print(filt_label[filt]);
 
   // print RF Premaplifier setting
-  ucg.setPrintPos( 105, 138); ucg.setFont(fontSmaller); ucg.setColor(0, 255, 255, 255); ucg.setColor(1, 0, 139, 139); ucg.print("PreA");
-  ucg.setPrintPos( 151, 138); ucg.setColor(1, 0, 139, 139); ucg.setColor(255, 255, 0); ucg.print(rfpre_label[rfpre]);
+  ucg.setPrintPos( 105, 138); ucg.setFont(fontSmaller); ucg.setColor(0, 255, 255, 255); ucg.setColor(1, 0, 0, 120); ucg.print("PreA");
+  ucg.setPrintPos( 151, 138); ucg.setColor(1, 0, 0, 120); ucg.setColor(255, 255, 0); ucg.print(rfpre_label[rfpre]);
     
   // printStep
-  ucg.setPrintPos( 204, 138); ucg.setFont(fontSmaller); ucg.setColor(0, 255, 255, 255); ucg.setColor(1, 254, 140, 0); ucg.print("Step");
-  ucg.setPrintPos( 249, 138); ucg.setColor(1,254, 140, 0);  ucg.setColor(255, 255, 0); ucg.print(stepsize_label[stepsize]);
+  ucg.setPrintPos( 204, 138); ucg.setFont(fontSmaller); ucg.setColor(0, 255, 255, 255); ucg.setColor(1, 0, 0, 120); ucg.print("Step");
+  ucg.setPrintPos( 249, 138); ucg.setColor(1, 0, 0, 120);  ucg.setColor(255, 255, 0); ucg.print(stepsize_label[stepsize]);
     
   // printRIT
-  ucg.setPrintPos( 204, 169); ucg.setFont(fontSmaller); ucg.setColor(0, 255, 255, 255); ucg.setColor(1, 255, 0, 0); ucg.print("RIT"); ucg.print(rit?"+":"-");
+  ucg.setPrintPos( 204, 169); ucg.setFont(fontSmaller); ucg.setColor(0, 255, 255, 255); ucg.setColor(1, 0,185,185); ucg.print("RIT"); ucg.print(rit?"+":"-");
   //ucg.setPrintPos( 144, 176); ucg.print(offon_label[rit]); ucg.print("  ");
   sprintf(buff,"%-+5i", ritFreq);
-  ucg.setPrintPos( 249, 169); ucg.setColor(1, 255, 0, 0);  ucg.setColor(255, 255, 0); ucg.print(buff);
+  ucg.setPrintPos( 249, 169); ucg.setColor(1, 0,185,185);  ucg.setColor(0, 0, 0); ucg.print(buff);
 }
 
 void printBlanks(){
@@ -621,16 +622,16 @@ void printBlanks(){
 void printTXstate(bool tx) {  // TODO - may need to rework this
   ucg.setPrintPos( 115, 205);
   if (tx) {
-    ucg.setColor(255,0,0);
-    ucg.drawRFrame(80, 187, 150, 23, 0);
-    ucg.drawRFrame(79, 186, 152, 25, 0);
-    ucg.drawRFrame(78, 185, 154, 27, 0);
-    ucg.setFont(fontSmaller); ucg.setColor(255,0,0); ucg.print("---TX---"); //ucg.setColor(255,255,255);
+    ucg.setColor(255,0,0); ucg.setColor(1,255,0,0);
+    ucg.drawRBox(80, 187, 150, 23, 3);
+    ucg.setColor(255,255,255); 
+    ucg.drawRFrame(79, 186, 152, 25, 5);
+    ucg.setFont(fontSmaller); ucg.setColor(255,255,255); ucg.print("TRANSMIT"); //ucg.setColor(255,255,255);
   } else {
-    ucg.setColor(0,0,0);
-    ucg.drawRFrame(80, 187, 150, 23, 0);
-    ucg.drawRFrame(79, 186, 152, 25, 0);
-    ucg.drawRFrame(78, 185, 154, 27, 0);
+    delay(600);      // G6LBQ 09/03/2023 added delay to reduce screen redraw when in CW mode
+    ucg.setColor(0,0,0); ucg.setColor(1,0,0,0);
+    ucg.drawRBox(80, 187, 150, 23, 3);
+    ucg.drawRFrame(79, 186, 152, 25, 5);
     ucg.print("          ");
   }
 }
@@ -740,6 +741,7 @@ void triggerBandChange(int menu) {
 // Anything could have changed so calculate _everything_
 void triggerValueChange(int menu) {
   select_Attenuator(atten);
+  select_DSP(filt);
   select_RFPreamplifier(rfpre);     // G6LBQ 29/11/2022 added for RF PreAmplifier
   updateAllFreq();
   updateScreen();
@@ -958,16 +960,19 @@ void setup() {
  
   b.add(SW_BAND, EVT_PA1_BTNUP, EVT_PA1_LONGPRESS);      // G6LBQ 29/11/2022 Changed from PA0 to PA1
   b.add(SW_STEP, EVT_PC15_BTNUP, EVT_PC15_LONGPRESS);    // G6LBQ 29/11/2022 Changed from PA1 to PC15
-  b.add(SW_VFO,  EVT_PC14_BTNUP, EVT_PC14_LONGPRESS);    // G6LBQ 08/12/2022 Changed from PA4 to PC14  
+  b.add(SW_VFO,  EVT_PC14_BTNUP, EVT_PC14_LONGPRESS);    // G6LBQ 08/12/2022 Changed from 0 to PC14  
   b.add(SW_MODE, EVT_PA0_BTNUP, EVT_PA0_LONGPRESS);      // G6LBQ 29/11/2022 Changed from PC14 to PA0  
   b.add(SW_MENUON, EVT_PB4_BTNUP, EVT_PB4_LONGPRESS);    // G6LBQ 29/11/2022 Changed from PC15 to PB4
   b.add(SW_ATTEN,EVT_PB11_BTNUP, EVT_PB11_LONGPRESS);    // G6LBQ 29/11/2022 Changed from PA6 to PB11
   b.add(SW_RFPRE,EVT_PB5_BTNUP, EVT_PB5_LONGPRESS);      // G6LBQ 29/11/2022 Added for RF PreAmplifier
-  b.add(SW_FILT,EVT_PB3_BTNUP, EVT_PB3_LONGPRESS);       // G6LBQ 29/11/2022 Added for DSP Noise Reduction
+  b.add(SW_RIT,EVT_PA15_BTNUP, EVT_PA15_LONGPRESS);      // G6LBQ 29/11/2022 Added for RIT
+  b.add(SW_FILT,EVT_PA4_BTNUP, EVT_PA4_LONGPRESS);       // G6LBQ 08/03/2023 Added for DSP Filter
    
-  
+  //pinMode(PB3, INPUT_PULLUP);
+  pinMode(PA4, INPUT_PULLUP);
   pinMode(LED, OUTPUT);
   pinMode(SW_TX,INPUT_PULLUP);
+  pinMode(SW_RIT,INPUT_PULLUP);
   pinMode(OUT_LSB,OUTPUT);                    // LSB Mode 
   pinMode(OUT_USB,OUTPUT);                    // USB Mode
   pinMode(OUT_CW,OUTPUT);                     // CW Mode - G6LBQ added additional mode selection
@@ -1019,8 +1024,8 @@ void loop() {
 
   int event = b.getButtonEvent();
   switch (event) {
-     case EVT_PB3_BTNUP:
-       traceLog("PB3_BTNUP\n", 0);
+     case EVT_PA15_BTNUP:
+       traceLog("PA15_BTNUP\n", 0);
        // implement a shortcut to go straight to the RITFREQ menu
        
        if (!menumode) { // radio is in normal operation; treat button input as a shortcut to the RITFREQ menu
@@ -1033,7 +1038,7 @@ void loop() {
        }
        break;
 
-     case EVT_PB3_LONGPRESS:  // set the RIT offset freq back to 0, and maybe turning RIT on/off as well.
+     case EVT_PA15_LONGPRESS:  // set the RIT offset freq back to 0, and maybe turning RIT on/off as well.
       ritFreq = 0;
       rit ^= 1;               // turn RIT on/off as well. Comment out or delete if not needed
       triggerValueChange(0);  // update all calculations
@@ -1091,6 +1096,19 @@ void loop() {
       }
       triggerValueChange(0);
       break;
+
+   case EVT_PA4_BTNUP:                        // G6LBQ 08/03/2023 added for DSP Filter button
+      filt = (filt + 1) % _N(filt_label);
+      triggerValueChange(0);
+      break;
+
+   case EVT_PA4_LONGPRESS:                     // G6LBQ 08/03/2023 added for DSP Filter button
+      filt = filt - 1;
+      if (filt < 0) {
+        filt = _N(filt_label) - 1;
+      }
+      triggerValueChange(0);
+      break;   
     
     case EVT_PB11_BTNUP:                        // ATTENUATOR button
       atten = (atten + 1) % _N(atten_label);
