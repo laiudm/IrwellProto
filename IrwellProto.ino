@@ -152,7 +152,6 @@ enum vfo_t { VFOA=0, VFOB=1, SPLIT=2 };
 // their initialisation values are stored in the eeprom on a "factory" reset
 // As a convenience they are in the order they appear in the menu
 
-int16_t  mode = MODE_USB;
 int16_t  modeA[] = { MODE_USB, MODE_USB};
 int16_t  atten = 0;
 int16_t  rfpre = 0;     //G6LBQ 29/11/2022 added for RF PreAmp
@@ -591,7 +590,7 @@ void updateScreen() {
     
   // printMode
   ucg.setPrintPos( 7, 138); ucg.setFont(fontSmaller); ucg.setColor(0, 255, 255, 255); ucg.setColor(1, 0, 0, 120); ucg.print("Mode"); 
-  ucg.setPrintPos( 53, 138); ucg.setColor(1, 0, 0, 120);  ucg.setColor(255, 255, 0); ucg.print(mode_label[mode]);
+  ucg.setPrintPos( 53, 138); ucg.setColor(1, 0, 0, 120);  ucg.setColor(255, 255, 0); ucg.print(mode_label[modeA[vfosel]]);
 
   // print attentuator setting
   ucg.setPrintPos( 7, 169); ucg.setFont(fontSmaller); ucg.setColor(0, 255, 255, 255); ucg.setColor(1, 0,185,185); ucg.print("Attn");
@@ -651,13 +650,13 @@ void updateModeOutputs(uint8_t mode) {
 //void updateAllFreqDualConversion() {
 void updateAllFreq() {
   int32_t freq = vfo[vfosel];
-  int32_t finalIF = ifFreq[mode];
+  int32_t finalIF = ifFreq[modeA[vfosel]];
   int32_t freqRIT = rit ? ritFreq : 0;
   
   select_BPF(freq);
   select_LPF(freq);
   select_DSP(filt);
-  updateModeOutputs(mode);
+  updateModeOutputs(modeA[vfosel]);
   
   // set the VFO to put the desired input frequency at 45MHz
   // set the Conv Oscillator to bring 45MHz to the firstIF frequency
@@ -675,7 +674,7 @@ void updateAllFreq() {
   
   setFrequency(VFO_PORT, VFO_CHL, vfofreq, xtalfreq);
   setFrequency(CONV_PORT, CONV_CHL, convFreq, xtalfreq); // no frequency inversion
-  switch(mode) {
+  switch(modeA[vfosel]) {
     case MODE_USB: 
     case MODE_LSB:
       setFrequency(BFO_PORT, BFO_CHL, finalIF, xtalfreq);
@@ -696,15 +695,15 @@ void updateAllFreq() {
 //void updateAllFreq() {                          //Uncomment for single conversion, comment out for dual conversion  
 void updateAllFreqHide() {                      //Uncomment for dual conversion, comment out for single conversion  
   int32_t freq = vfo[vfosel];
-  int32_t finalIF = ifFreq[mode];
+  int32_t finalIF = ifFreq[modeA[vfosel]];
   int32_t freqRIT = rit ? ritFreq : 0;
   
   select_BPF(freq);
   select_LPF(freq);
-  updateModeOutputs(mode);
+  updateModeOutputs(modeA[vfosel]);
   uint32_t vfofreq = freq + finalIF + freqRIT;
   setFrequency(VFO_PORT, VFO_CHL, vfofreq, xtalfreq);
-  switch(mode) {
+  switch(modeA[vfosel]) {
     case MODE_USB: 
     case MODE_LSB:
       setFrequency(BFO_PORT, BFO_CHL, finalIF, xtalfreq);
@@ -733,7 +732,7 @@ void triggerVFOChange() {
 }
 
 void triggerBandChange(int menu) {
-  mode = bandMode[bandval];
+  modeA[vfosel] = bandMode[bandval];
   vfo[vfosel] = bandFreq[bandval];
   triggerValueChange(0);
   setEEPROMautoSave();
@@ -780,14 +779,14 @@ void bandDown() {
 }
 
 void setmodeUp() {
-  mode = (mode + 1) % _N(mode_label);
+  modeA[vfosel] = (modeA[vfosel] + 1) % _N(mode_label);
   triggerValueChange(0);
   setEEPROMautoSave();
 }
 
 void setmodeDown() {
-  if (mode==0) mode = _N(mode_label);
-  mode--;
+  if (modeA[vfosel]==0) modeA[vfosel] = _N(mode_label);
+  modeA[vfosel]--;
   triggerValueChange(0);
   setEEPROMautoSave();
 }
@@ -887,7 +886,7 @@ int8_t paramAction(uint8_t action, uint8_t id = ALL) { // list of parameters
   switch(id){    
     case ALL:     for(id = 1; id != N_ALL_PARAMS+1; id++) paramAction(action, id);  // for all parameters
     // Visible parameters
-    case MODE:    paramAction(action, mode,           0x11,    "Mode -----",      mode_label,        0, _N(mode_label)-1, triggerValueChange); break;
+    case MODE:    paramAction(action, modeA[vfosel],  0x11,    "Mode -----",      mode_label,        0, _N(mode_label)-1, triggerValueChange); break;
     case FILTER:  paramAction(action, filt,           0x12,    "NR Filter -",     filt_label,       0, _N(filt_label)-1, triggerValueChange); break;
     case BAND:    paramAction(action, bandval,        0x13,    "Band -----",      band_label,        0, _N(band_label)-1, triggerBandChange ); break;
     case STEP:    paramAction(action, stepsize,       0x14,    "Tune Rate ",      stepsize_label,    0, _N(stepsize_label)-1, triggerValueChange); break;
@@ -1202,7 +1201,8 @@ void loop() {
       // debug only to display some state variables
       traceLog("eeprom version: %i", eeprom_version);
       traceLog("menumode: %i", menumode);
-      traceLog("mode: %i", mode);
+      traceLog("mode[VFOA] %i", modeA[VFOA]);
+      traceLog("mode[VFOB] %i", modeA[VFOB]);
       traceLog("filt: %i", filt);
       traceLog("stepsize: %i", stepsize);
       traceLog("vfosel: %i", vfosel);
