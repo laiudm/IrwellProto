@@ -21,7 +21,7 @@
 ///////////////////////////////////////////////////////////////////////////////////
 
 //#define REQUIRESERIALCONNECTED    // uncomment to stall on startup until usb serial is connected
-//#define MOCKI2C     // uncomment this to mock transmission to the 2x pcf8574 , Si5351s
+#define MOCKI2C     // uncomment this to mock transmission to the 2x pcf8574 , Si5351s
 
 #define OPTICAL_ENCODER         // uncomment this line for an optical encoder
 #ifdef OPTICAL_ENCODER
@@ -153,6 +153,7 @@ enum vfo_t { VFOA=0, VFOB=1, SPLIT=2 };
 // As a convenience they are in the order they appear in the menu
 
 int16_t  mode = MODE_USB;
+int16_t  modeA[] = { MODE_USB, MODE_USB};
 int16_t  atten = 0;
 int16_t  rfpre = 0;     //G6LBQ 29/11/2022 added for RF PreAmp
 int16_t  filt = 0;
@@ -167,7 +168,7 @@ int32_t  vfo[] = { 7074000, 14074000 };
 uint32_t firstIF = 45000000;
 uint16_t eeprom_version;
 
-#define get_version_id() 1
+#define get_version_id() 2
 
 // end of state variables stored in eeprom
 
@@ -196,9 +197,9 @@ int8_t  menu = 1;  // current parameter id selected in menu
 
 
 enum action_t { UPDATE, UPDATE_MENU, NEXT_MENU, LOAD, SAVE, SKIP, NEXT_CH };
-enum params_t {NULL_, MODE, FILTER, BAND, STEP, VFOSEL, RIT, RITFREQ, ATTEN, RFPRE, SIFXTAL, IF_LSB, IF_USB, IF_CW, IF_AM, IF_FM, FIRSTIF, FREQA, FREQB, VERS, ALL=0xff};   // G6LBQ 29/11/2022 added RFPRE
+enum params_t {NULL_, MODE, FILTER, BAND, STEP, VFOSEL, RIT, RITFREQ, ATTEN, RFPRE, SIFXTAL, IF_LSB, IF_USB, IF_CW, IF_AM, IF_FM, FIRSTIF, FREQA, FREQB, MODEA, MODEB, VERS, ALL=0xff};   // G6LBQ 29/11/2022 added RFPRE
 #define N_PARAMS 16                // number of (visible) parameters    // G6LBQ 29/11/2022 increased Params from 15 to 16 so RFPRE is included
-#define N_ALL_PARAMS (N_PARAMS+3)  // total of all parameters
+#define N_ALL_PARAMS (VERS)  // total of all parameters
 
 
 
@@ -297,7 +298,7 @@ void select_BPF(uint32_t freq) {
 //--------- Low Pass Filter Bank Selection ---------------------------------
 
 #define LPF_PCF_ADDR 0x3a
-//#define MOCK_LPF
+#define MOCK_LPF
 
 // Duplicate of write_PCF8574, but is added to allow this I2C interface to be 
 // easily mocked out independently of the other I2C interfaces.
@@ -906,6 +907,8 @@ int8_t paramAction(uint8_t action, uint8_t id = ALL) { // list of parameters
     // invisible parameters. These are here only for eeprom save/restore
     case FREQA:   paramAction(action, vfo[VFOA],         0,        NULL,           NULL,         0,                    0, triggerNoop       ); break;
     case FREQB:   paramAction(action, vfo[VFOB],         0,        NULL,           NULL,         0,                    0, triggerNoop       ); break;
+    case MODEA:   paramAction(action, modeA[VFOA],       0,        NULL,           NULL,         0,                    0, triggerNoop       ); break;
+    case MODEB:   paramAction(action, modeA[VFOB],       0,        NULL,           NULL,         0,                    0, triggerNoop       ); break;
     case VERS:    paramAction(action, eeprom_version,    0,        NULL,           NULL,         0,                    0, triggerNoop       ); break;
     
     // case NULL_:   menumode = NO_MENU; clearMenuArea(); break;
@@ -1197,15 +1200,16 @@ void loop() {
       traceLog("Time for 20 chars: %i\n", dt);
     } else if (ch == 's') {
       // debug only to display some state variables
-      traceLog("menumode: %i\n", menumode);
-      traceLog("mode: %i\n", mode);
-      traceLog("filt: %i\n", filt);
-      traceLog("stepsize: %i\n", stepsize);
-      traceLog("vfosel: %i\n", vfosel);
-      traceLog("rit: %i\n", rit);
-      traceLog("ritFreq: %i\n", ritFreq);
-      traceLog("vfo[VFOA]: %i\n", vfo[VFOA]);
-      traceLog("vfo[VFOB]: %i\n\n\n", vfo[VFOB]);
+      traceLog("eeprom version: %i", eeprom_version);
+      traceLog("menumode: %i", menumode);
+      traceLog("mode: %i", mode);
+      traceLog("filt: %i", filt);
+      traceLog("stepsize: %i", stepsize);
+      traceLog("vfosel: %i", vfosel);
+      traceLog("rit: %i", rit);
+      traceLog("ritFreq: %i", ritFreq);
+      traceLog("vfo[VFOA]: %i", vfo[VFOA]);
+      traceLog("vfo[VFOB]: %i\n\n", vfo[VFOB]);
     }
   }
 }
