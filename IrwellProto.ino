@@ -619,22 +619,44 @@ void printBlanks(){
   ucg.print("          ");
 }
 
-void printTXstate(bool tx) {  // TODO - may need to rework this
+void printTXstate(bool tx) {
   ucg.setPrintPos( 115, 205);
   if (tx) {
+    ucg.setPrintPos( 115, 205);
     ucg.setColor(255,0,0); ucg.setColor(1,255,0,0);
     ucg.drawRBox(80, 187, 150, 23, 3);
     ucg.setColor(255,255,255); 
     ucg.drawRFrame(79, 186, 152, 25, 5);
     ucg.setFont(fontSmaller); ucg.setColor(255,255,255); ucg.print("TRANSMIT"); //ucg.setColor(255,255,255);
   } else {
-    delay(600);      // G6LBQ 09/03/2023 added delay to reduce screen redraw when in CW mode
     ucg.setColor(0,0,0); ucg.setColor(1,0,0,0);
     ucg.drawRBox(80, 187, 150, 23, 3);
     ucg.drawRFrame(79, 186, 152, 25, 5);
     ucg.print("          ");
   }
 }
+
+void updateTXprintState(bool tx) {
+  // Called repeatedly by the main loop and therefore at high speed
+  // Displays the "transmit" message on the first key-down, and 
+  // Removes the message txHoldTime_ms milliseconds after the last key-up.
+  
+  #define txHoldTime_ms 500  // adjust this to your personal preference
+  static bool TX_is_displayed = false;
+  static uint32_t lastTXtime = 0;
+  
+  if (tx && !TX_is_displayed) {
+    printTXstate(true);
+    TX_is_displayed = true;
+  }
+  if (!tx && (millis() > (lastTXtime + txHoldTime_ms)) ) {
+    printTXstate(false);
+    TX_is_displayed = false;
+  }
+  if (tx) lastTXtime = millis();
+}
+    
+  
 
 //--------------- Business Logic---------------------------------------------
 
@@ -1153,15 +1175,16 @@ void loop() {
       // transition from rx to tx
       transmitting = true;
       updateAllFreq();
-      printTXstate(transmitting);
+      //printTXstate(transmitting);
       break;
     case 0x10:
       // transition from tx to rx
       transmitting = false;
-      printTXstate(transmitting);
+      //printTXstate(transmitting);
       updateAllFreq();
       break;
   }
+  updateTXprintState(transmitting);
 
   if (EEPROMautoSave && (millis()>EEPROMautoSave)) {
     EEPROMautoSave = 0;
@@ -1191,12 +1214,15 @@ void loop() {
       traceLog("Time for for setFont, getStrWidth: %i\n", dt);
       
     } else if (ch == 'd') { 
-      // debug only to measure screen write time
-      ucg.setPrintPos( 0, 198);
+      // debug to measure screen write time
       long dt = micros();
-      ucg.print("Time this string1234");
-      dt = micros() - dt;
-      traceLog("Time for 20 chars: %i\n", dt);
+      printTXstate(true);
+      traceLog("Time for tx on: %i\n", micros() - dt);
+
+      dt = micros();
+      printTXstate(false);
+      traceLog("Time for tx off: %i\n", micros() - dt);
+      
     } else if (ch == 's') {
       // debug only to display some state variables
       traceLog("eeprom version: %i", eeprom_version);
