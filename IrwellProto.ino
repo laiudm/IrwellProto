@@ -165,9 +165,10 @@ uint32_t xtalfreq = 25000000;
 uint32_t ifFreq[]  = {11056570,   11059840, 11057048, 11061850, 11061850};
 int32_t  vfo[] = { 7074000, 14074000 };
 uint32_t firstIF = 45000000;
+uint16_t preset = 0;
 uint16_t eeprom_version;
 
-#define get_version_id() 2
+#define get_version_id() 3
 
 // end of state variables stored in eeprom
 
@@ -188,6 +189,21 @@ static const uint32_t conversionOffsets[] {
   56059000  // FM
 };
 
+typedef struct Preset {
+  uint32_t frequency;
+  modes    mode;
+  int16_t  filt;
+  int16_t  atten;
+  int16_t  rfpre;
+} Preset;
+
+Preset presets[] = {
+  // freq      mode   filt atten rfpre
+  {10000000, MODE_USB, -1,  -1,   -1},
+  {20100000, MODE_CW ,  0,   1,    0},
+  {31000000, MODE_FM ,  8,   3,    1}
+};
+
 //------------- menu system --------------------------------
 
 enum menu_t { NO_MENU, MENU_SELECTED, MENU_VALUE };
@@ -196,8 +212,8 @@ int8_t  menu = 1;  // current parameter id selected in menu
 
 
 enum action_t { UPDATE, UPDATE_MENU, NEXT_MENU, LOAD, SAVE, SKIP, NEXT_CH };
-enum params_t {NULL_, MODE, FILTER, BAND, STEP, VFOSEL, RIT, RITFREQ, ATTEN, RFPRE, SIFXTAL, IF_LSB, IF_USB, IF_CW, IF_AM, IF_FM, FIRSTIF, FREQA, FREQB, MODEA, MODEB, VERS, ALL=0xff};   // G6LBQ 29/11/2022 added RFPRE
-#define N_PARAMS 16                // number of (visible) parameters    // G6LBQ 29/11/2022 increased Params from 15 to 16 so RFPRE is included
+enum params_t {NULL_, MODE, FILTER, BAND, STEP, VFOSEL, RIT, RITFREQ, ATTEN, RFPRE, SIFXTAL, IF_LSB, IF_USB, IF_CW, IF_AM, IF_FM, FIRSTIF, PRESETS, FREQA, FREQB, MODEA, MODEB, VERS, ALL=0xff};   // G6LBQ 29/11/2022 added RFPRE
+#define N_PARAMS 17                // number of (visible) parameters    // G6LBQ 29/11/2022 increased Params from 15 to 16 so RFPRE is included
 #define N_ALL_PARAMS (VERS)  // total of all parameters
 
 
@@ -342,7 +358,7 @@ void select_LPF(uint32_t freq) {
 //--------- DSP Filter Bank Selection ---------------------------------
 //--------- Added by G6LBQ 10/12/2022 ---------------------------------
 #define DSP_PCF_ADDR 0x3b
-//#define MOCK_DSP
+#define MOCK_DSP
 
 void write_DSP_PCF8574(uint8_t address, uint8_t data) {
 #ifndef MOCK_DSP
@@ -769,6 +785,16 @@ void triggerValueChange(int menu) {
   updateScreen();
 }
 
+void triggerPresetChange(int menu) {
+  Preset p = presets[preset];
+  if (p.frequency > 0) vfo[vfosel]   = p.frequency;
+  if (p.mode     >= 0) modeA[vfosel] = p.mode;
+  if (p.filt     >= 0) filt  = p.filt;
+  if (p.atten    >= 0) atten = p.atten;
+  if (p.rfpre    >= 0) rfpre = p.rfpre;
+  triggerValueChange(0);
+}
+
 void triggerNoop(int menu) {}
 
 
@@ -838,18 +864,15 @@ void printmenuid(uint8_t menuid){ // output menuid in x.y format
   }
 }
 
-void printlabel(uint8_t action, uint8_t menuid, const char* label){
+void printlabel(uint8_t menuid, const char* label){
   ucg.setFont(fontSmaller); ucg.setColor(0, 255, 255, 0); ucg.setColor(1, 0, 0, 0);
-  if(action == UPDATE_MENU){
-    ucg.setPrintPos( 3, 232);
-    printmenuid(menuid);
-    ucg.print(label); printBlanks(); printBlanks();
-    ucg.setFont(fontSmaller); ucg.setColor(0, 255, 0, 0);
-    ucg.setPrintPos( 155, 232);                         
-    if(menumode >= MENU_VALUE) ucg.print('>');
-  } else { // UPDATE (not in menu)
-    ucg.setPrintPos( 3, 232); ucg.print(label); ucg.print(": ");
-  }
+  ucg.setPrintPos( 3, 232);
+  printmenuid(menuid);
+  ucg.print(label); printBlanks(); printBlanks();
+  ucg.setFont(fontSmaller); ucg.setColor(0, 255, 0, 0);
+  ucg.setPrintPos( 155, 232);                         
+  if(menumode >= MENU_VALUE)
+    ucg.print('>');
 }
 
 void actionCommon(uint8_t action, uint16_t *ptr, uint8_t size){
@@ -866,8 +889,30 @@ void actionCommon(uint8_t action, uint16_t *ptr, uint8_t size){
   eeprom_addr += size;
 }
 
-template<typename T> void paramAction(uint8_t action, volatile T& value, uint8_t menuid, const char* label, const char* enumArray[], int32_t _min, int32_t _max, void (*trigger)(int m)){
-  
+
+void displayNum(const char* enumArray[], int32_t value, int32_t _min) {
+  if((_min < 0) && (value >= 0)) ucg.print('+');  // add + sign for positive values, in case negative values are supported
+    ucg.print(value);
+}
+
+void displayLab(const char* enumArray[], int32_t value, int32_t _min) {
+  ucg.print(enumArray[value]);
+}
+
+void displayPre(const char* enumArray[], int32_t value, int32_t _min) {
+  // Use value to index into the presets table
+  Preset thisPreset = presets[value];
+  printFreq(thisPreset.frequency);
+  char buff[20];
+  sprintf(buff, " %2i", value);
+  ucg.print(buff);
+}
+
+
+template<typename T> void paramAction(uint8_t action, volatile T& value, uint8_t menuid, 
+    const char* label, void (*display)(const char* enumArray[], int32_t value, int32_t _min),
+    const char* enumArray[], int32_t _min, int32_t _max, void (*trigger)(int) ){
+
   switch(action){
     case UPDATE:
     case UPDATE_MENU: {
@@ -877,14 +922,8 @@ template<typename T> void paramAction(uint8_t action, volatile T& value, uint8_t
       if(     value < _min) value = _min;
       else if(value > _max) value = _max;
       resetEncoder();
-
-      printlabel(action, menuid, label);  // print normal/menu label
-      if(enumArray == NULL){  // print value
-        if((_min < 0) && (value >= 0)) ucg.print('+');  // add + sign for positive values, in case negative values are supported
-        ucg.print(value);
-      } else {
-        ucg.print(enumArray[value]);
-      }
+      printlabel(menuid, label);  // print menu label
+      display(enumArray, value, _min);  // display info associated with this menu item
       printBlanks(); printBlanks();
       if (delta)
         trigger(menuid);  // only trigger if there's a change to the value
@@ -897,7 +936,7 @@ template<typename T> void paramAction(uint8_t action, volatile T& value, uint8_t
   }
 }
 
-int8_t paramAction(uint8_t action, uint8_t id = ALL) { // list of parameters
+void paramAction(uint8_t action, uint8_t id = ALL) { // list of parameters
   if((action == SAVE) || (action == LOAD)){
     // first calculate eeprom_addr for this item
     eeprom_addr = EEPROM_OFFSET;
@@ -908,35 +947,31 @@ int8_t paramAction(uint8_t action, uint8_t id = ALL) { // list of parameters
   switch(id){    
     case ALL:     for(id = 1; id != N_ALL_PARAMS+1; id++) paramAction(action, id);  // for all parameters
     // Visible parameters
-    case MODE:    paramAction(action, modeA[vfosel],  0x11,    "Mode -----",      mode_label,        0, _N(mode_label)-1, triggerValueChange); break;
-    case FILTER:  paramAction(action, filt,           0x12,    "NR Filter -",     filt_label,       0, _N(filt_label)-1, triggerValueChange); break;
-    case BAND:    paramAction(action, bandval,        0x13,    "Band -----",      band_label,        0, _N(band_label)-1, triggerBandChange ); break;
-    case STEP:    paramAction(action, stepsize,       0x14,    "Tune Rate ",      stepsize_label,    0, _N(stepsize_label)-1, triggerValueChange); break;
-    case VFOSEL:  paramAction(action, vfosel,         0x15,    "VFO Mode -",      vfosel_label,      0, _N(vfosel_label)-1, triggerValueChange); break;
-    case RIT:     paramAction(action, rit,            0x16,    "RIT ------",      offon_label,       0, _N(offon_label)-1, triggerValueChange); break;
-    case RITFREQ: paramAction(action, ritFreq,        0x17,    "RIT Offset",      NULL,    -1000,    1000, triggerValueChange); break;
-    case ATTEN:   paramAction(action, atten,          0x18,    "Atten ----",      atten_label,       0, _N(atten_label)-1, triggerValueChange); break;
-    case RFPRE:   paramAction(action, rfpre,          0x19,    "RF Preamp ",      rfpre_label,       0, _N(rfpre_label)-1, triggerValueChange); break;    // G6LBQ 29/11/2022 added for RF PreAmplifier
-    case SIFXTAL: paramAction(action, xtalfreq,       0x81,    "RefFreq --",      NULL, 24975000,    25025000, triggerValueChange); break;
-    case IF_LSB:  paramAction(action, ifFreq[0],      0x82,    "IF-LSB ---",      NULL, 8000000,     12000000, triggerValueChange); break;
-    case IF_USB:  paramAction(action, ifFreq[1],      0x83,    "IF-USB ---",      NULL, 8000000,     12000000, triggerValueChange); break;
-    case IF_CW:   paramAction(action, ifFreq[2],      0x84,    "IF-CW ----",      NULL, 8000000,     12000000, triggerValueChange); break;
-    case IF_AM:   paramAction(action, ifFreq[3],      0x85,    "IF-AM ----",      NULL, 8000000,     12000000, triggerValueChange); break;
-    case IF_FM:   paramAction(action, ifFreq[4],      0x86,    "IF-FM ----",      NULL, 8000000,     12000000, triggerValueChange); break;
-    case FIRSTIF: paramAction(action, firstIF,        0x87,    "First-IF -",      NULL, 42000000,    48000000, triggerValueChange); break;
+    case MODE:    paramAction(action, modeA[vfosel],  0x11,    "Mode -----", displayLab, mode_label,        0,     _N(mode_label)-1, triggerValueChange); break;
+    case FILTER:  paramAction(action, filt,           0x12,    "NR Filter-", displayLab, filt_label,        0,     _N(filt_label)-1, triggerValueChange); break;
+    case BAND:    paramAction(action, bandval,        0x13,    "Band -----", displayLab, band_label,        0,     _N(band_label)-1, triggerBandChange ); break;
+    case STEP:    paramAction(action, stepsize,       0x14,    "Tune Rate-", displayLab, stepsize_label,    0, _N(stepsize_label)-1, triggerValueChange); break;
+    case VFOSEL:  paramAction(action, vfosel,         0x15,    "VFO Mode -", displayLab, vfosel_label,      0,   _N(vfosel_label)-1, triggerValueChange); break;
+    case RIT:     paramAction(action, rit,            0x16,    "RIT ------", displayLab, offon_label,       0,    _N(offon_label)-1, triggerValueChange); break;
+    case RITFREQ: paramAction(action, ritFreq,        0x17,    "RIT Offset", displayNum, NULL,          -1000,                 1000, triggerValueChange); break;
+    case ATTEN:   paramAction(action, atten,          0x18,    "Atten ----", displayLab, atten_label,       0,    _N(atten_label)-1, triggerValueChange); break;
+    case RFPRE:   paramAction(action, rfpre,          0x19,    "RF Preamp-", displayLab, rfpre_label,       0,    _N(rfpre_label)-1, triggerValueChange); break;    // G6LBQ 29/11/2022 added for RF PreAmplifier
+    case SIFXTAL: paramAction(action, xtalfreq,       0x81,    "RefFreq --", displayNum, NULL,       24975000,             25025000, triggerValueChange); break;
+    case IF_LSB:  paramAction(action, ifFreq[0],      0x82,    "IF-LSB ---", displayNum, NULL,        8000000,             12000000, triggerValueChange); break;
+    case IF_USB:  paramAction(action, ifFreq[1],      0x83,    "IF-USB ---", displayNum, NULL,        8000000,             12000000, triggerValueChange); break;
+    case IF_CW:   paramAction(action, ifFreq[2],      0x84,    "IF-CW ----", displayNum, NULL,        8000000,             12000000, triggerValueChange); break;
+    case IF_AM:   paramAction(action, ifFreq[3],      0x85,    "IF-AM ----", displayNum, NULL,        8000000,             12000000, triggerValueChange); break;
+    case IF_FM:   paramAction(action, ifFreq[4],      0x86,    "IF-FM ----", displayNum, NULL,        8000000,             12000000, triggerValueChange); break;
+    case FIRSTIF: paramAction(action, firstIF,        0x87,    "First-IF -", displayNum, NULL,       42000000,             48000000, triggerValueChange); break;
+    case PRESETS: paramAction(action, preset,         0x88,    "PRESETS --", displayPre, NULL,              0,        _N(presets)-1, triggerPresetChange);break;
     
     // invisible parameters. These are here only for eeprom save/restore
-    case FREQA:   paramAction(action, vfo[VFOA],         0,        NULL,           NULL,         0,                    0, triggerNoop       ); break;
-    case FREQB:   paramAction(action, vfo[VFOB],         0,        NULL,           NULL,         0,                    0, triggerNoop       ); break;
-    case MODEA:   paramAction(action, modeA[VFOA],       0,        NULL,           NULL,         0,                    0, triggerNoop       ); break;
-    case MODEB:   paramAction(action, modeA[VFOB],       0,        NULL,           NULL,         0,                    0, triggerNoop       ); break;
-    case VERS:    paramAction(action, eeprom_version,    0,        NULL,           NULL,         0,                    0, triggerNoop       ); break;
-    
-    // case NULL_:   menumode = NO_MENU; clearMenuArea(); break;
-    default:      if((action == NEXT_MENU) && (id != N_PARAMS)) 
-                      id = paramAction(action, max(1 /*0*/, min(N_PARAMS, id + ((readEncoder(ROTARY_LOW_SENSITIVITY) > 0) ? 1 : -1))) ); break;  // keep iterating util menu item found
+    case FREQA:   paramAction(action, vfo[VFOA],         0,            NULL, displayNum, NULL,               0,                    0, triggerNoop      ); break;
+    case FREQB:   paramAction(action, vfo[VFOB],         0,            NULL, displayNum, NULL,               0,                    0, triggerNoop      ); break;
+    case MODEA:   paramAction(action, modeA[VFOA],       0,            NULL, displayNum, NULL,               0,                    0, triggerNoop      ); break;
+    case MODEB:   paramAction(action, modeA[VFOB],       0,            NULL, displayNum, NULL,               0,                    0, triggerNoop      ); break;
+    case VERS:    paramAction(action, eeprom_version,    0,            NULL, displayNum, NULL,               0,                    0, triggerNoop      ); break;
   }
-  return id;  // needed?
 }
 
 void processMenuKey() {
@@ -957,7 +992,7 @@ void processMenu() {
     if((menumode == 1) && encoder_change){
        menu += readEncoder(ROTARY_LOW_SENSITIVITY);   // Navigate through menu
       menu = max(1 , min(menu, N_PARAMS));
-      menu = paramAction(NEXT_MENU, menu);  // auto probe next menu item (gaps may exist)
+      paramAction(NEXT_MENU, menu); // update the menu display
       resetEncoder();
     }
     if(encoder_change)
@@ -965,6 +1000,17 @@ void processMenu() {
   }
 }
 
+void menuShortcut(int menuSelection) {
+     // Go straight to the chosen menu
+     if (!menumode) { // radio is in normal operation; treat button input as a shortcut to the chosen menu
+       menu = menuSelection;
+       processMenuKey();  // simulate a "menu" button presss
+       processMenuKey();  // and again to get to the "update" menu
+     } else {
+      // already in the menu system so simulate a single "menu" button press to exit the menu
+      processMenuKey();
+     }
+}
 
 //------------------  Initialization -------------------------
  
@@ -1046,31 +1092,22 @@ void loop() {
 
   digitalWrite(LED, !digitalRead(LED));
 
+  // process key entry events
   int event = b.getButtonEvent();
   switch (event) {
-     case EVT_PA15_BTNUP:
-       traceLog("PA15_BTNUP\n", 0);
-       // implement a shortcut to go straight to the RITFREQ menu
-       
-       if (!menumode) { // radio is in normal operation; treat button input as a shortcut to the RITFREQ menu
-         menu = RITFREQ;
-         processMenuKey();  // simulate a "menu" button presss
-         processMenuKey();  // and again to get to the "update" menu
-       } else {
-        // already in the menu system so simulate a single "menu" button press to exit the menu
-        processMenuKey();
-       }
-       break;
 
-     case EVT_PA15_LONGPRESS:  // set the RIT offset freq back to 0, and maybe turning RIT on/off as well.
+    case EVT_PA15_BTNUP:
+      menuShortcut(RITFREQ);
+      break;
+
+    case EVT_PA15_LONGPRESS:  // set the RIT offset freq back to 0, and maybe turning RIT on/off as well.
       ritFreq = 0;
       rit ^= 1;               // turn RIT on/off as well. Comment out or delete if not needed
       triggerValueChange(0);  // update all calculations
       setEEPROMautoSave();    // ensure eeprom is updated
       break;
-      
-       
-     case EVT_PB4_BTNUP: // menu button
+
+    case EVT_PB4_BTNUP: // menu button
       processMenuKey();
       break;      
  
@@ -1151,6 +1188,7 @@ void loop() {
       break; // nothing to do  
   }
 
+  // process the rotary encode input. If a menu is open then direct rotary inputs there.
   if (menumode) {
     processMenu();
   } else {
@@ -1224,7 +1262,11 @@ void loop() {
       traceLog("Time for tx off: %i\n", micros() - dt);
       
     } else if (ch == 's') {
-      // debug only to display some state variables
+      // tests to see if lambdas work. They do!
+      //auto func = [preset] (int i) { traceLog("closure (%i), result: %i", i, preset*i); };
+      //func(1); func(2);
+      
+      // debug: display some state variables
       traceLog("eeprom version: %i", eeprom_version);
       traceLog("menumode: %i", menumode);
       traceLog("mode[VFOA] %i", modeA[VFOA]);
@@ -1235,7 +1277,8 @@ void loop() {
       traceLog("rit: %i", rit);
       traceLog("ritFreq: %i", ritFreq);
       traceLog("vfo[VFOA]: %i", vfo[VFOA]);
-      traceLog("vfo[VFOB]: %i\n\n", vfo[VFOB]);
+      traceLog("vfo[VFOB]: %i", vfo[VFOB]);
+      traceLog("preset: %i\n\n", preset);
     }
   }
 }
