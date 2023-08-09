@@ -119,7 +119,8 @@ ButtonEvents b = ButtonEvents(EVT_NOCHANGE);
 #define   OUT_ATT1     PA3
 #define   OUT_ATT2     PA6
 
-#define   OUT_RFPRE    PB9                // G6LBQ 29/11/2022 added control out for RF Preamplifier               
+#define   OUT_RFPRE    PB9                // G6LBQ 29/11/2022 added control out for RF Preamplifier
+#define   TX_OUT       PB3                // G6LBQ 31/07/2023 added control out for TX state       
 
 #define   LED          PC13
 
@@ -199,8 +200,11 @@ typedef struct Preset {
 
 Preset presets[] = {
   // freq      mode   filt atten rfpre
-  {10000000, MODE_USB, -1,  -1,   -1},
-  {20100000, MODE_CW ,  0,   1,    0},
+  {1458000,  MODE_AM,  -1,  -1,   -1},
+  {5505000, MODE_USB ,  0,   1,    0},
+  {5680000, MODE_USB ,  0,   1,    0},
+  {8879000, MODE_USB ,  0,   1,    0},
+  {8957000, MODE_USB ,  0,   1,    0},
   {31000000, MODE_FM ,  8,   3,    1}
 };
 
@@ -664,10 +668,12 @@ void updateTXprintState(bool tx) {
   if (tx && !TX_is_displayed) {
     printTXstate(true);
     TX_is_displayed = true;
+    digitalWrite(TX_OUT, HIGH);
   }
-  if (!tx && (millis() > (lastTXtime + txHoldTime_ms)) ) {
+  if (!tx && TX_is_displayed && (millis() > (lastTXtime + txHoldTime_ms)) ) {
     printTXstate(false);
     TX_is_displayed = false;
+    digitalWrite(TX_OUT, LOW);
   }
   if (tx) lastTXtime = millis();
 }
@@ -1052,6 +1058,7 @@ void setup() {
   pinMode(OUT_ATT1,OUTPUT);
   pinMode(OUT_ATT2,OUTPUT);
   pinMode(OUT_RFPRE,OUTPUT);                  // G6LBQ 29/11/2022 added output to control RF PreAmp
+  pinMode(TX_OUT,OUTPUT);                     // G6LBQ 31/07/2023 added output to control TX Circuits
 
   init_BPF();
   init_LPF();
@@ -1090,7 +1097,25 @@ void setup() {
 
 void loop() {
 
-  digitalWrite(LED, !digitalRead(LED));
+  // measure how long it takes to perform each loop. Result is displayed on the serial port
+  static uint32_t loopTimer = millis();
+  static uint32_t maxLoopTime = 0;
+  maxLoopTime = max(maxLoopTime, millis() - loopTimer);
+  loopTimer = millis();
+
+  // flash the led to give visual indication of fluctuations in loop timing. Typical loop time is 600 us.
+  // led has 3 levels (and off, which isn't used)
+  static int8_t direction = 1; //alternative between +1 & -1
+  static int8_t duration = 0; // goes from 1 to 3 and back down
+  static uint32_t loopCounter = 1;
+  if (++loopCounter > 20000) {
+    loopCounter = 0;
+    duration += direction;
+    if (duration >= 7) direction = -1;
+    if (duration <= 1) direction = +1;
+  }
+  uint8_t delta = millis() & 0x7; // just look at the bottom bits
+  digitalWrite(LED, delta >= duration);
 
   // process key entry events
   int event = b.getButtonEvent();
@@ -1127,7 +1152,6 @@ void loop() {
       
     case EVT_PC14_BTNUP:    // VFO A/B Select
       vfosel = vfosel^1;
- //   rit = rit^1;          // toggle the bottom bit onoff
       triggerValueChange(0); 
       setEEPROMautoSave();
       break;
@@ -1150,12 +1174,8 @@ void loop() {
       triggerValueChange(0);
       break;
 
-   case EVT_PB5_LONGPRESS:                     // G6LBQ 29/11/2022 added for RF PreAmp button
-      rfpre = rfpre - 1;
-      if (rfpre < 0) {
-        rfpre = _N(rfpre_label) - 1;
-      }
-      triggerValueChange(0);
+   case EVT_PB5_LONGPRESS:
+      menuShortcut(PRESETS);                  // shortcut to the presets menu
       break;
 
    case EVT_PA4_BTNUP:                        // G6LBQ 08/03/2023 added for DSP Filter button
@@ -1213,12 +1233,10 @@ void loop() {
       // transition from rx to tx
       transmitting = true;
       updateAllFreq();
-      //printTXstate(transmitting);
       break;
     case 0x10:
       // transition from tx to rx
       transmitting = false;
-      //printTXstate(transmitting);
       updateAllFreq();
       break;
   }
@@ -1278,7 +1296,8 @@ void loop() {
       traceLog("ritFreq: %i", ritFreq);
       traceLog("vfo[VFOA]: %i", vfo[VFOA]);
       traceLog("vfo[VFOB]: %i", vfo[VFOB]);
-      traceLog("preset: %i\n\n", preset);
+      traceLog("preset: %i", preset);
+      traceLog("max loop time: %i us\n\n", maxLoopTime); maxLoopTime= 0;
     }
   }
 }
