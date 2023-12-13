@@ -166,7 +166,7 @@ uint32_t xtalfreq = 25000000;
 uint32_t ifFreq[]  = {11056570,   11059840, 11057048, 11061850, 11061850};
 int32_t  vfo[] = { 7074000, 14074000 };
 uint32_t firstIF = 45000000;
-uint16_t preset = 0;
+int16_t preset = 0;
 uint16_t eeprom_version;
 
 #define get_version_id() 3
